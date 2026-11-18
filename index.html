@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banners HTML5</title>
+<link rel="stylesheet" href="styles.css">
+<script src="vendor/jszip.min.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="dot"></span> Banners HTML5</div>
+  <input id="campaign" class="campaign" value="Banner" spellcheck="false" title="Nombre de la campaña (se usa en los archivos)">
+  <div class="spacer"></div>
+  <span id="status" class="status"></span>
+  <button id="btnGenerate" class="primary" disabled>Generar ZIP + GIF</button>
+</header>
+
+<main class="layout">
+  <aside class="side">
+    <section>
+      <h3>1 · Archivos</h3>
+      <label id="drop" class="drop">
+        <input id="file" type="file" multiple accept=".zip,.psd,.png,.jpg,.jpeg">
+        <strong>Soltá acá el ZIP</strong>
+        <span>con los PNG y/o el PSD (o el PSD suelto)</span>
+      </label>
+      <p id="ingestInfo" class="hint"></p>
+      <button id="btnDemo" class="link">Probar con un ejemplo</button>
+    </section>
+
+    <section>
+      <h3>2 · Tamaños</h3>
+      <div id="sizes" class="chips"></div>
+      <div class="row">
+        <input id="customSize" placeholder="Otro, ej. 300x600" spellcheck="false">
+        <button id="addSize">Agregar</button>
+      </div>
+    </section>
+
+    <section>
+      <h3>3 · Animación</h3>
+      <div class="seg" id="transition">
+        <button data-v="wipe" class="on">Barrido</button>
+        <button data-v="fade">Fundido</button>
+      </div>
+      <p class="hint">Textos, logo y botón entran por separado (fade + 16 px, 0,375 s, quadOut). Sin loop, termina en el CTA.</p>
+    </section>
+
+    <section>
+      <h3>4 · Click y peso</h3>
+      <label class="field">URL de clic (clickTag)
+        <input id="clickTag" placeholder="https://" spellcheck="false">
+      </label>
+      <label class="field">Peso máximo del ZIP (KB)
+        <input id="maxKB" type="number" value="228" min="40" max="2000">
+      </label>
+    </section>
+
+    <section>
+      <h3>5 · Indicaciones <span class="tag">beta</span></h3>
+      <textarea id="prompt" rows="3" placeholder="Ej: fundido, 13 segundos, link https://…, sumá 728x90"></textarea>
+      <button id="btnPrompt">Aplicar</button>
+      <p id="promptInfo" class="hint">Por ahora entiendo URL, transición, duración total, peso y tamaños. Cuando conectemos Claude vas a poder pedir cualquier cambio.</p>
+    </section>
+  </aside>
+
+  <section class="center">
+    <div class="tabs" id="sizeTabs"></div>
+    <div class="strip" id="strip"></div>
+    <div class="toolbar">
+      <span id="frameLabel" class="muted"></span>
+      <div class="spacer"></div>
+      <button id="btnUndo" title="Deshacer (Ctrl+Z)">Deshacer</button>
+      <button id="btnResetFrame" title="Vuelve el frame a la posición automática">Restablecer frame</button>
+      <button id="btnPreview" class="accent">▶ Vista previa</button>
+    </div>
+    <div class="stage-wrap" id="stageWrap">
+      <div class="empty" id="empty">
+        <p><strong>Subí tus archivos para empezar.</strong></p>
+        <p>Con el PSD separo fondo, textos, logo y botón para animarlos y para que los puedas mover. Con PNG aplanados cada imagen es un frame.</p>
+      </div>
+      <div class="stage" id="stage" hidden>
+        <div class="world" id="world"></div>
+        <div class="window" id="window"></div>
+        <div class="selbox" id="selbox" hidden><div class="handle" id="handle"></div></div>
+      </div>
+    </div>
+    <p class="hint center-hint">Clic para elegir una capa · arrastrá para mover · rueda o esquina para escalar · flechas para ajustar 1 px (Shift = 10 px). Elegí <b>Foto</b> para mover o hacer zoom del recorte.</p>
+  </section>
+
+  <aside class="inspector">
+    <section>
+      <h3>Frame</h3>
+      <label class="field inline">Duración (s) <input id="duration" type="number" step="0.1" min="0.5" max="10"></label>
+      <p id="totalInfo" class="hint"></p>
+    </section>
+    <section>
+      <h3>Capas</h3>
+      <div id="layers" class="layers"></div>
+    </section>
+    <section id="selPanel" hidden>
+      <h3 id="selTitle">Selección</h3>
+      <label class="field">Escala <input id="selScale" type="range" min="0.2" max="3" step="0.01"></label>
+      <div class="row nums">
+        <label>X <input id="selX" type="number"></label>
+        <label>Y <input id="selY" type="number"></label>
+        <label>% <input id="selS" type="number" step="1"></label>
+      </div>
+      <button id="btnCover" hidden>Cubrir el banner</button>
+    </section>
+    <section>
+      <h3>Vista previa</h3>
+      <div class="preview" id="previewBox"><div class="pv" id="pv"><iframe id="preview" title="Vista previa" sandbox="allow-scripts allow-same-origin allow-popups"></iframe></div></div>
+      <button id="btnReplay">Repetir</button>
+    </section>
+    <section>
+      <h3>Entregables</h3>
+      <div id="outputs" class="outputs"><p class="hint">Todavía no generaste nada.</p></div>
+    </section>
+  </aside>
+</main>
+
+<div class="busy" id="busy" hidden><div class="spinner"></div><p id="busyText">Procesando…</p></div>
+
+<script type="module" src="src/app.js"></script>
+</body>
+</html>
