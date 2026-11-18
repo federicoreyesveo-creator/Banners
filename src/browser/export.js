@@ -31,6 +31,7 @@ function makeHtml(plan, assets, { title, clickTag, embedGsap }) {
   return buildGsapHtml(plan, assets, { title, clickTag, gsapSrc: embedGsap ? 'gsap.min.js' : GSAP_CDN });
 }
 import { rasterToCanvas, scaledCanvas, newCanvas, toBlob, encodeShadowPng } from './canvas.js';
+import { bgAt, hasOriginal } from './hires.js';
 import { GIFEncoder, quantize, applyPalette } from '../../vendor/gifenc.esm.js';
 
 const JSZip = () => window.JSZip;
@@ -45,14 +46,18 @@ export function renderFrameParts(plan) {
     let bg = null;
     if (f.bg) {
       // Con foto original disponible, el fondo sale en 2x (retina); el HTML lo muestra al tamaño del banner.
-      const k = f.bg.hi ? f.bg.hi.k : 1;
+      // La foto sale del original del objeto inteligente, achicada a la escala justa.
+      const k = hasOriginal(f.bg.src, plan.linked) ? 2 : 1;
       bg = newCanvas(W * k, H * k);
       const ctx = bg.getContext('2d');
       ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W * k, H * k);
       ctx.imageSmoothingQuality = 'high';
-      const r = f.bg.hi || f.bg.raster;
-      const src = f.bg.s === 1 ? rasterToCanvas(r) : scaledCanvas(r, f.bg.s);
-      ctx.drawImage(src, Math.round(f.bg.x * k), Math.round(f.bg.y * k));
+      const hi = k > 1 && bgAt(f.bg.src, f.bg.s * k, plan.linked);
+      if (hi) ctx.drawImage(hi, Math.round(f.bg.x * k), Math.round(f.bg.y * k));
+      else {
+        const src = f.bg.s === 1 ? rasterToCanvas(f.bg.raster) : scaledCanvas(f.bg.raster, f.bg.s);
+        ctx.drawImage(src, Math.round(f.bg.x * k), Math.round(f.bg.y * k), src.width * k, src.height * k);
+      }
     }
     const counters = { text: 0, logo: 0, cta: 0 };
     const items = {};

@@ -35,16 +35,17 @@ export async function ingest(fileList, onStatus = () => {}) {
     else if (IMG_RE.test(name)) images.push({ name, get: async () => file });
   }
 
-  const sizes = {};
+  const sizes = {}, linked = {};
   if (psds.length) {
     for (const p of psds) {
       onStatus(`Leyendo capas de ${p.name.split('/').pop()}…`);
       const buf = await p.get();
       const src = await parsePsd(buf);
       for (const [k, frames] of Object.entries(src.sizes)) (sizes[k] ||= []).push(...frames);
+      Object.assign(linked, src.linked);
     }
     if (images.length) notes.push('Usé el PSD (capas separadas). Los PNG del ZIP quedaron como referencia.');
-    return { sizes, kind: 'psd', notes };
+    return { sizes, linked, kind: 'psd', notes };
   }
   if (images.length) {
     const decoded = [];

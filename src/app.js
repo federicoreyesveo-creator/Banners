@@ -6,6 +6,7 @@ import { ingest } from './browser/ingest.js';
 import { rasterToCanvas, newCanvas } from './browser/canvas.js';
 import { exportSize, previewHtml, renderFrameParts, composeFinal } from './browser/export.js';
 import { demoSources } from './browser/demo.js';
+import { bgAt, hasOriginal } from './browser/hires.js';
 
 const $ = (id) => document.getElementById(id);
 const S = {
@@ -35,7 +36,7 @@ function buildProject(sources) {
     for (const f of Object.values(pf.sources)) Object.assign(pf.anims, defaultAnims(f, i));
     return pf;
   });
-  return { master, frames, transition: currentTransition(), photoFx: $('photoFx').value, ctaFx: $('ctaFx').value, layouts: {} };
+  return { master, frames, linked: sources.linked || null, transition: currentTransition(), photoFx: $('photoFx').value, ctaFx: $('ctaFx').value, layouts: {} };
 }
 
 function ensureLayout(size) {
@@ -125,7 +126,7 @@ function renderAll() {
   if (!S.cur || !S.sizes.includes(S.cur)) S.cur = S.sizes[0];
   if (!S.cur) return;
   ensureLayout(S.cur);
-  renderTabs(); renderStage(); renderInspector(); renderTimeline(); scheduleThumbs(); renderPills();
+  renderTabs(); renderStage(); renderInspector(); scheduleThumbs(); renderPills();
 }
 
 // Textos de las pastillas de arriba.
@@ -203,7 +204,9 @@ function renderStage() {
   world.innerHTML = '';
   const src = curSrc(), lay = curLay();
   if (src.bg && lay.bg) {
-    const c = cloneCanvas(rasterToCanvas(src.bg.raster));
+    // En el editor la foto también sale del original en alta, a la resolución de la pantalla.
+    const hi = bgAt(src.bg, lay.bg.s * zoom * (window.devicePixelRatio || 1), S.project.linked, { round: true });
+    const c = cloneCanvas(hi || rasterToCanvas(src.bg.raster));
     c.className = 'bgc'; c.dataset.id = 'bg';
     placeEl(c, lay.bg.x, lay.bg.y, src.bg.raster.w * lay.bg.s, src.bg.raster.h * lay.bg.s);
     world.appendChild(c);
@@ -223,7 +226,9 @@ function renderStage() {
 function updateWarn() {
   const lay = curLay(), w = $('stageWarn');
   const msgs = [];
-  if (lay.bg && lay.bg.s > 1.5) msgs.push(`La foto está agrandada al <b>${Math.round(lay.bg.s * 100)}%</b> y se puede ver pixelada. Para este tamaño conviene una foto en más resolución o armarlo en el PSD.`);
+  // Con la foto original del objeto inteligente se puede agrandar hasta 2x sin perder (sale de una foto 4 veces más grande).
+  const bgMax = hasOriginal(curSrc().bg, S.project.linked) ? 2 : 1.5;
+  if (lay.bg && lay.bg.s > bgMax) msgs.push(`La foto está agrandada al <b>${Math.round(lay.bg.s * 100)}%</b> y se puede ver pixelada. Para este tamaño conviene una foto en más resolución o armarlo en el PSD.`);
   const big = Object.values(lay.el).filter((L) => !L.hidden && L.s > 1.3).length;
   if (big) msgs.push(`Hay ${big} capa${big > 1 ? 's' : ''} agrandada${big > 1 ? 's' : ''} más de 130%: el texto puede verse borroso.`);
   w.innerHTML = msgs.join('<br>');
@@ -271,7 +276,6 @@ function updateSelBox() {
   $('selScale').value = g.L.s; $('selX').value = Math.round(g.L.x); $('selY').value = Math.round(g.L.y); $('selS').value = Math.round(g.L.s * 100);
   $('btnCover').hidden = S.sel !== 'bg';
   for (const el of document.querySelectorAll('.layer')) el.classList.toggle('on', el.dataset.id === S.sel);
-  for (const el of document.querySelectorAll('.tl-block, .tl-name')) el.classList.toggle('on', el.dataset.id === S.sel);
 }
 
 function moveSel(dx, dy) {
@@ -355,7 +359,7 @@ function setupStage() {
   }, { passive: false });
   window.addEventListener('keydown', (ev) => {
     if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) return;
-    if (document.activeElement?.closest?.('.tl-block, .tl-end-h, .split')) return;
+    if (document.activeElement?.closest?.('.split')) return;
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z') { ev.preventDefault(); undo(); return; }
     if (ev.key === '+' || ev.key === '=') { ev.preventDefault(); stepZoom(1); return; }
     if (ev.key === '-' || ev.key === '_') { ev.preventDefault(); stepZoom(-1); return; }
@@ -366,7 +370,7 @@ function setupStage() {
     if (map[ev.key]) { ev.preventDefault(); pushHistory(); moveSel(...map[ev.key]); refreshPreviewSoon(); }
     if (ev.key === 'Escape') { S.sel = null; updateSelBox(); }
   });
-  window.addEventListener('resize', () => { if (S.project) { renderStage(); fitPreview(); renderTimeline(); } });
+  window.addEventListener('resize', () => { if (S.project) { renderStage(); fitPreview(); } });
 }
 let wheelTimer = 0;
 function showGuides(v, h) {
@@ -411,8 +415,8 @@ function renderInspector() {
       (S.sel === e.id ? `<select aria-label="Animación de entrada">${Object.entries(ANIMS).map(([k, v]) => `<option value="${k}" ${k === a.anim ? 'selected' : ''}>${v.label}</option>`).join('')}</select>` : '');
     d.onclick = (ev) => { if (ev.target.closest('select,input')) return; selectLayer(e.id); };
     const chk = d.querySelector('input[type=checkbox]'), sel = d.querySelector('select');
-    chk.onchange = () => { pushHistory(); L.hidden = !chk.checked; renderStage(); renderInspector(); renderTimeline(); scheduleThumbs(); refreshPreviewSoon(); };
-    if (sel) sel.onchange = () => { pushHistory(); a.anim = sel.value; delete a.dur; renderEngine(); renderTimeline(); refreshPreviewSoon(); };
+    chk.onchange = () => { pushHistory(); L.hidden = !chk.checked; renderStage(); renderInspector(); scheduleThumbs(); refreshPreviewSoon(); };
+    if (sel) sel.onchange = () => { pushHistory(); a.anim = sel.value; delete a.dur; renderEngine(); refreshPreviewSoon(); };
     box.appendChild(d);
   }
   if (!src.elements.length) {
@@ -424,7 +428,7 @@ function renderInspector() {
 }
 
 function setupInspector() {
-  $('duration').onchange = () => { pushHistory(); curPF().duration = Math.max(0.5, parseFloat($('duration').value) || 2); renderTabs(); renderTimeline(); scheduleThumbs(); refreshPreviewSoon(); };
+  $('duration').onchange = () => { pushHistory(); curPF().duration = Math.max(0.5, parseFloat($('duration').value) || 2); renderTabs(); scheduleThumbs(); refreshPreviewSoon(); };
   $('selScale').oninput = () => scaleSel(parseFloat($('selScale').value));
   $('selScale').onpointerdown = () => pushHistory();
   $('selScale').onchange = () => refreshPreviewSoon();
@@ -551,7 +555,7 @@ function renderEngine() {
 }
 function setTransition(v) {
   $('transition').value = v;
-  if (S.project) { S.project.transition = v; renderTabs(); renderEngine(); renderTimeline(); refreshPreviewSoon(); }
+  if (S.project) { S.project.transition = v; renderTabs(); renderEngine(); refreshPreviewSoon(); }
   renderPills();
 }
 
@@ -583,112 +587,6 @@ function selectLayer(id) {
 // "Texto largo · 2" → "2 · Texto largo", para que el número del renglón no quede cortado.
 function shortName(n) { const m = n.match(/^(.*) · (\d+)$/); return m ? `${m[2]} · ${m[1]}` : n; }
 
-// ---------- línea de tiempo ----------
-// Un bloque por capa: arrastrarlo cambia cuándo entra, estirarlo desde el borde cambia cuánto dura.
-// También con teclado: ←/→ mueve 0,05 s (Shift: 0,25 s), Alt+←/→ cambia la duración.
-const SNAP = 0.05;
-const snap = (v) => Math.round(v / SNAP) * SNAP;
-const fmt = (v) => v.toFixed(2).replace(/0$/, '').replace('.', ',');
-function renderTimeline() {
-  const box = $('timeline');
-  if (!S.project || !S.cur) { box.innerHTML = ''; return; }
-  const plan = buildPlan(S.project, S.cur);
-  const f = plan.frames[S.frame], pf = curPF();
-  const trDur = S.frame === 0 ? 0 : f.trDur;
-  const items = f.items.map((it) => ({ it, t0: it.start - f.start, t1: it.start - f.start + Math.max(it.dur, 0.05) }));
-  const span = Math.max(pf.duration, ...items.map((x) => x.t1)) + 0.3;
-  box.innerHTML = '';
-  const grid = document.createElement('div'); grid.className = 'tl-grid';
-  const ruler = document.createElement('div'); ruler.className = 'tl-ruler';
-  grid.append(document.createElement('div'), ruler);
-  box.appendChild(grid);
-  const trackW = () => ruler.clientWidth || 1;
-  const pct = (t) => `${(t / span) * 100}%`;
-  const step = span > 6 ? 1 : 0.5;
-  for (let t = 0; t <= span - 0.1; t += step) { const sp = document.createElement('span'); sp.style.left = pct(t); sp.textContent = `${fmt(t)}s`; ruler.appendChild(sp); }
-  const tracks = [];
-  if (!items.length) { const p = document.createElement('div'); p.className = 'tl-empty'; p.textContent = 'Este frame no tiene capas para animar.'; p.style.gridColumn = '1 / 3'; grid.appendChild(p); }
-  for (const { it, t0, t1 } of items) {
-    const a = pf.anims[it.id];
-    const name = document.createElement('div');
-    name.className = 'tl-name' + (S.sel === it.id ? ' on' : ''); name.dataset.id = it.id;
-    name.innerHTML = `${kindIcon(it.kind)}<em></em>`;
-    name.querySelector('em').textContent = shortName(it.name); name.title = it.name;
-    name.onclick = () => selectLayer(it.id);
-    const track = document.createElement('div'); track.className = 'tl-track';
-    if (trDur) { const tr = document.createElement('div'); tr.className = 'tl-trans'; tr.style.width = pct(trDur); tr.title = 'Transición del frame'; track.appendChild(tr); }
-    const b = document.createElement('div');
-    b.className = 'tl-block' + (S.sel === it.id ? ' on' : ''); b.dataset.id = it.id; b.dataset.kind = it.kind;
-    b.tabIndex = 0; b.setAttribute('role', 'slider');
-    const label = () => { b.setAttribute('aria-label', `${it.name}: entra en ${fmt(t0 + 0)} s`); };
-    label();
-    b.style.left = pct(t0); b.style.width = pct(t1 - t0);
-    b.textContent = `${fmt(t1 - t0)}s`;
-    const canStretch = it.anim !== 'none' && it.anim !== 'typewriter' || it.segs;
-    if (canStretch) { const g = document.createElement('span'); g.className = 'grip'; b.appendChild(g); }
-    b.title = 'Arrastrá para mover · estirá desde el borde para cambiar la duración';
-    // arrastre
-    b.addEventListener('pointerdown', (ev) => {
-      ev.preventDefault(); b.focus();
-      if (S.sel !== it.id) { S.sel = it.id; renderInspector(); }
-      pushHistory();
-      const mode = ev.target.classList.contains('grip') ? 'dur' : 'move';
-      const d0 = a.delay || 0, dur0 = t1 - t0, x0 = ev.clientX, pps = trackW() / span;
-      b.setPointerCapture(ev.pointerId);
-      const move = (e) => {
-        const dt = (e.clientX - x0) / pps;
-        if (mode === 'move') {
-          a.delay = Math.max(0, snap(d0 + dt));
-          const nt0 = t0 + (a.delay - d0);
-          b.style.left = pct(nt0); b.textContent = `${fmt(dur0)}s`;
-        } else {
-          a.dur = Math.max(0.1, snap(dur0 + dt));
-          b.style.width = pct(a.dur); b.textContent = `${fmt(a.dur)}s`;
-        }
-        if (canStretch) { const g = document.createElement('span'); g.className = 'grip'; b.appendChild(g); }
-      };
-      const up = () => { b.removeEventListener('pointermove', move); b.removeEventListener('pointerup', up); b.removeEventListener('pointercancel', up); renderTimeline(); refreshPreviewSoon(); };
-      b.addEventListener('pointermove', move); b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
-    });
-    b.addEventListener('keydown', (ev) => {
-      const dir = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
-      if (!dir) return;
-      ev.preventDefault(); pushHistory();
-      const st = ev.shiftKey ? 0.25 : SNAP;
-      if (ev.altKey && canStretch) a.dur = Math.max(0.1, snap((a.dur || t1 - t0) + dir * st));
-      else a.delay = Math.max(0, snap((a.delay || 0) + dir * st));
-      renderTimeline(); refreshPreviewSoon();
-      document.querySelector(`.tl-block[data-id="${CSS.escape(it.id)}"]`)?.focus();
-    });
-    b.addEventListener('dblclick', () => { pushHistory(); delete a.dur; a.delay = 0; renderTimeline(); refreshPreviewSoon(); });
-    track.appendChild(b);
-    grid.append(name, track);
-    tracks.push(track);
-  }
-  // Fin del frame: se arrastra para cambiar cuánto dura el frame.
-  const end = document.createElement('div'); end.className = 'tl-end';
-  const placeEnd = () => { const r = ruler.getBoundingClientRect(), g = grid.getBoundingClientRect(); end.style.left = `${r.left - g.left + (pf.duration / span) * r.width}px`; };
-  const h = document.createElement('div'); h.className = 'tl-end-h'; h.tabIndex = 0; h.setAttribute('role', 'slider');
-  h.setAttribute('aria-label', `Duración del frame: ${fmt(pf.duration)} s`); h.title = `Fin del frame (${fmt(pf.duration)} s): arrastrá para cambiar la duración`;
-  end.appendChild(h); grid.appendChild(end);
-  requestAnimationFrame(placeEnd);
-  const setDur = (v) => { pf.duration = Math.max(0.5, Math.min(10, snap(v))); $('duration').value = pf.duration; renderTabs(); };
-  h.addEventListener('pointerdown', (ev) => {
-    ev.preventDefault(); pushHistory();
-    const x0 = ev.clientX, d0 = pf.duration, pps = trackW() / span;
-    h.setPointerCapture(ev.pointerId);
-    const move = (e) => { setDur(d0 + (e.clientX - x0) / pps); placeEnd(); h.title = `${fmt(pf.duration)} s`; };
-    const up = () => { h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); renderTimeline(); scheduleThumbs(); refreshPreviewSoon(); };
-    h.addEventListener('pointermove', move); h.addEventListener('pointerup', up);
-  });
-  h.addEventListener('keydown', (ev) => {
-    const dir = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
-    if (!dir) return;
-    ev.preventDefault(); pushHistory(); setDur(pf.duration + dir * (ev.shiftKey ? 0.5 : 0.1));
-    renderTimeline(); scheduleThumbs(); refreshPreviewSoon(); document.querySelector('.tl-end-h')?.focus();
-  });
-}
-
 // ---------- popovers de la barra ----------
 function openPop(id, anchor) {
   const p = $(id);
@@ -713,12 +611,10 @@ function store(k, v) { try { if (v === undefined) return localStorage.getItem(k)
 function setupSplits() {
   const panes = $('panes'), root = document.documentElement;
   const applyV = (px) => { panes.style.setProperty('--edW', `${Math.round(px)}px`); };
-  const applyH = (px) => { root.style.setProperty('--dockH', `${Math.round(px)}px`); };
-  const v0 = parseFloat(store('bn.edW')), h0 = parseFloat(store('bn.dockH'));
-  if (v0) applyV(v0); if (h0) applyH(h0);
-  const after = () => { if (S.project) { renderStage(); fitPreview(); renderTimeline(); } };
+  const v0 = parseFloat(store('bn.edW'));
+  if (v0) applyV(v0);
+  const after = () => { if (S.project) { renderStage(); fitPreview(); } };
   const limitsV = () => { const total = $('editorPane').offsetWidth + $('previewPane').offsetWidth; return [220, total - 220]; };
-  const limitsH = () => [92, Math.max(120, $('work').clientHeight - 200)];
   const drag = (el, axis, get, apply, limits, key) => {
     el.addEventListener('pointerdown', (ev) => {
       ev.preventDefault(); el.setPointerCapture(ev.pointerId); el.classList.add('on');
@@ -735,7 +631,6 @@ function setupSplits() {
     el.addEventListener('dblclick', () => { if (axis === 'x') panes.style.removeProperty('--edW'); else root.style.removeProperty('--dockH'); try { localStorage.removeItem(key); } catch (e) { /* sin almacenamiento */ } after(); });
   };
   drag($('splitV'), 'x', () => $('editorPane').offsetWidth, applyV, limitsV, 'bn.edW');
-  drag($('splitH'), 'y', () => $('dock').offsetHeight, applyH, limitsH, 'bn.dockH');
 }
 
 function setup() {

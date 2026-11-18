@@ -68,7 +68,7 @@ function flatten(layers, out = [], parentOpacity = 1) {
       isSmart: !!l.placedLayer,
       shadow: readShadow(l.effects),
       // Objeto inteligente: guarda la foto original embebida para armar fondos 2x.
-      smart: l.placedLayer && l.placedLayer.id && !l.mask ? { id: l.placedLayer.id, t: l.placedLayer.transform } : null,
+      smart: l.placedLayer && l.placedLayer.id && l.placedLayer.transform && !l.mask ? { id: l.placedLayer.id, t: l.placedLayer.transform } : null,
     });
   }
   return out;
@@ -159,14 +159,21 @@ export function psdToSources(readPsd, buffer) {
   frames.sort((a, b) => natCmp(a.name, b.name));
   const sizes = {};
   for (const f of frames) (sizes[`${f.w}x${f.h}`] ||= []).push(f);
-  // Archivos embebidos (fotos originales) que usan los fondos, solo JPG/PNG.
-  const used = new Set();
-  for (const fs of Object.values(sizes)) for (const f of fs) for (const p of f.bg?.parts || []) if (p.smart) used.add(p.smart.id);
+  // Archivos embebidos de los objetos inteligentes (la foto original en alta): JPG, PNG o PSB/PSD.
+  // need = el ancho más grande al que aparece colocado (px del PSD), para no decodificar de más.
+  const need = {};
+  for (const fs of Object.values(sizes)) for (const f of fs) for (const p of f.bg?.parts || []) {
+    if (!p.smart) continue;
+    const t = p.smart.t, w = Math.max(Math.hypot(t[2] - t[0], t[3] - t[1]), Math.hypot(t[6] - t[0], t[7] - t[1]));
+    need[p.smart.id] = Math.max(need[p.smart.id] || 0, w);
+  }
   const linked = {};
   for (const lf of psd.linkedFiles || []) {
-    if (!used.has(lf.id) || !lf.data) continue;
-    const head = lf.data[0] === 0xff && lf.data[1] === 0xd8 ? 'image/jpeg' : lf.data[0] === 0x89 && lf.data[1] === 0x50 ? 'image/png' : null;
-    if (head) linked[lf.id] = { type: head, data: lf.data };
+    if (!(lf.id in need) || !lf.data) continue;
+    const d = lf.data;
+    const type = d[0] === 0xff && d[1] === 0xd8 ? 'image/jpeg' : d[0] === 0x89 && d[1] === 0x50 ? 'image/png'
+      : d[0] === 0x38 && d[1] === 0x42 && d[2] === 0x50 && d[3] === 0x53 ? 'psd' : null;
+    if (type) linked[lf.id] = { type, data: d, need: need[lf.id] };
   }
   return { sizes, linked };
 }
