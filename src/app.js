@@ -220,19 +220,7 @@ function renderStage() {
     placeEl(c, L.x, L.y, e.raster.w * L.s, e.raster.h * L.s);
     world.appendChild(c);
   }
-  updateShadow(); updateSelBox(); updateWarn();
-}
-// Aviso cuando algo queda tan agrandado que se va a ver pixelado.
-function updateWarn() {
-  const lay = curLay(), w = $('stageWarn');
-  const msgs = [];
-  // Con la foto original del objeto inteligente se puede agrandar hasta 2x sin perder (sale de una foto 4 veces más grande).
-  const bgMax = hasOriginal(curSrc().bg, S.project.linked) ? 2 : 1.5;
-  if (lay.bg && lay.bg.s > bgMax) msgs.push(`La foto está agrandada al <b>${Math.round(lay.bg.s * 100)}%</b> y se puede ver pixelada. Para este tamaño conviene una foto en más resolución o armarlo en el PSD.`);
-  const big = Object.values(lay.el).filter((L) => !L.hidden && L.s > 1.3).length;
-  if (big) msgs.push(`Hay ${big} capa${big > 1 ? 's' : ''} agrandada${big > 1 ? 's' : ''} más de 130%: el texto puede verse borroso.`);
-  w.innerHTML = msgs.join('<br>');
-  w.hidden = !msgs.length;
+  updateShadow(); updateSelBox();
 }
 function cloneCanvas(src) { const c = newCanvas(src.width, src.height); c.getContext('2d').drawImage(src, 0, 0); return c; }
 function placeEl(el, x, y, w, h) { el.style.left = `${x}px`; el.style.top = `${y}px`; el.style.width = `${w}px`; el.style.height = `${h}px`; }
@@ -296,7 +284,7 @@ function syncSelected() {
   const g = selGeom(); if (!g) return;
   const el = $('world').querySelector(`[data-id="${CSS.escape(S.sel)}"]`);
   if (el) placeEl(el, g.L.x, g.L.y, g.base.w * g.L.s, g.base.h * g.L.s);
-  updateSelBox(); updateShadow(); updateWarn(); scheduleThumbs();
+  updateSelBox(); updateShadow(); scheduleThumbs();
 }
 
 function setupStage() {
@@ -630,7 +618,38 @@ function setupSplits() {
     });
     el.addEventListener('dblclick', () => { if (axis === 'x') panes.style.removeProperty('--edW'); else root.style.removeProperty('--dockH'); try { localStorage.removeItem(key); } catch (e) { /* sin almacenamiento */ } after(); });
   };
-  drag($('splitV'), 'x', () => $('editorPane').offsetWidth, applyV, limitsV, 'bn.edW');
+  // Divisor entre editor y vista previa: horizontal o vertical según la vista elegida.
+  const stacked = () => panes.classList.contains('stacked');
+  const sv = $('splitV');
+  const axisNow = () => (stacked() ? 'y' : 'x');
+  const getSize = () => (stacked() ? $('editorPane').offsetHeight : $('editorPane').offsetWidth);
+  const applySize = (px) => panes.style.setProperty(stacked() ? '--edH' : '--edW', `${Math.round(px)}px`);
+  const limitsSize = () => { const t = stacked() ? $('editorPane').offsetHeight + $('previewPane').offsetHeight : $('editorPane').offsetWidth + $('previewPane').offsetWidth; return [stacked() ? 140 : 220, t - (stacked() ? 140 : 220)]; };
+  sv.addEventListener('pointerdown', (ev) => {
+    ev.preventDefault(); sv.setPointerCapture(ev.pointerId); sv.classList.add('on');
+    const ax = axisNow(), start = ax === 'x' ? ev.clientX : ev.clientY, s0 = getSize();
+    const move = (e) => { const [lo, hi] = limitsSize(); applySize(Math.max(lo, Math.min(hi, s0 + (ax === 'x' ? e.clientX : e.clientY) - start))); after(); };
+    const up = () => { sv.classList.remove('on'); sv.removeEventListener('pointermove', move); sv.removeEventListener('pointerup', up); store(stacked() ? 'bn.edH' : 'bn.edW', String(getSize())); };
+    sv.addEventListener('pointermove', move); sv.addEventListener('pointerup', up);
+  });
+  sv.addEventListener('keydown', (ev) => {
+    const k = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[ev.key]; if (!k) return;
+    ev.preventDefault(); const [lo, hi] = limitsSize();
+    applySize(Math.max(lo, Math.min(hi, getSize() + k * (ev.shiftKey ? 80 : 20)))); after(); store(stacked() ? 'bn.edH' : 'bn.edW', String(getSize()));
+  });
+  sv.addEventListener('dblclick', () => { panes.style.removeProperty(stacked() ? '--edH' : '--edW'); after(); });
+  const h0 = parseFloat(store('bn.edH')); if (h0) panes.style.setProperty('--edH', `${h0}px`);
+  // Vista: lado a lado o arriba y abajo (se recuerda).
+  const setView = (v) => {
+    panes.classList.toggle('stacked', v === 'stack');
+    sv.setAttribute('aria-orientation', v === 'stack' ? 'horizontal' : 'vertical');
+    $('viewSide').classList.toggle('on', v !== 'stack'); $('viewStack').classList.toggle('on', v === 'stack');
+    $('viewSide').setAttribute('aria-pressed', String(v !== 'stack')); $('viewStack').setAttribute('aria-pressed', String(v === 'stack'));
+    store('bn.view', v); requestAnimationFrame(after);
+  };
+  $('viewSide').onclick = () => setView('side');
+  $('viewStack').onclick = () => setView('stack');
+  if (store('bn.view') === 'stack') setView('stack');
 }
 
 function setup() {
