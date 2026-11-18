@@ -163,11 +163,26 @@ function renderThumbs() {
 
 // ---------- editor ----------
 let zoom = 1;
+// Zoom de la vista (no cambia el banner). Arranca en 100 % = tamaño real; null = ajustar a la ventana.
+let viewZoom = 1;
+const ZOOMS = [0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2, 3, 4];
+function fitZoom(W, H) {
+  const wrap = $('stageWrap');
+  return Math.max(0.1, Math.min(4, (wrap.clientWidth - 80) / W, (wrap.clientHeight - 80) / H));
+}
+function setViewZoom(z) { viewZoom = z; if (S.project) renderStage(); }
+function stepZoom(dir) {
+  const cur = zoom;
+  const next = dir > 0 ? ZOOMS.find((z) => z > cur + 1e-3) : [...ZOOMS].reverse().find((z) => z < cur - 1e-3);
+  setViewZoom(next ?? cur);
+}
 function renderStage() {
   const { w: W, h: H } = parseSize(S.cur);
   const wrap = $('stageWrap');
   const availW = wrap.clientWidth - 80, availH = wrap.clientHeight - 80;
-  zoom = Math.max(0.3, Math.min(3, availW / W, availH / H));
+  void availW; void availH;
+  zoom = viewZoom == null ? fitZoom(W, H) : viewZoom;
+  $('zoomLabel').textContent = `${Math.round(zoom * 100)}%`;
   const stage = $('stage');
   stage.style.width = `${W * zoom}px`; stage.style.height = `${H * zoom}px`;
   const world = $('world');
@@ -318,6 +333,9 @@ function setupStage() {
   window.addEventListener('keydown', (ev) => {
     if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) return;
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z') { ev.preventDefault(); undo(); return; }
+    if (ev.key === '+' || ev.key === '=') { ev.preventDefault(); stepZoom(1); return; }
+    if (ev.key === '-' || ev.key === '_') { ev.preventDefault(); stepZoom(-1); return; }
+    if (ev.key === '0') { ev.preventDefault(); setViewZoom(1); return; }
     if (!S.sel) return;
     const step = ev.shiftKey ? 10 : 1;
     const map = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
@@ -395,6 +413,10 @@ function setupInspector() {
     renderAll(); refreshPreviewSoon();
   };
   $('btnUndo').onclick = undo;
+  $('zoomOut').onclick = () => stepZoom(-1);
+  $('zoomIn').onclick = () => stepZoom(1);
+  $('zoomLabel').onclick = () => setViewZoom(1);
+  $('zoomFit').onclick = () => setViewZoom(null);
 }
 
 // ---------- vista previa ----------
@@ -406,7 +428,7 @@ async function refreshPreview() {
   S.previewUrls.forEach((u) => URL.revokeObjectURL(u)); S.previewUrls = urls;
   const f = $('preview');
   const box = $('previewBox');
-  const k = Math.min(1, (box.clientWidth - 16) / plan.W);
+  const k = 1; // vista previa a tamaño real
   f.style.width = `${plan.W}px`; f.style.height = `${plan.H}px`;
   f.style.transform = `scale(${k})`;
   $('pv').style.width = `${plan.W * k}px`; $('pv').style.height = `${plan.H * k}px`;

@@ -73,6 +73,12 @@
       <div class="spacer"></div>
       <button id="btnUndo" title="Deshacer (Ctrl+Z)">Deshacer</button>
       <button id="btnResetFrame" title="Vuelve el frame a la posición automática">Restablecer frame</button>
+      <div class="zoom" title="Zoom de la vista (+ / − / 0 = 100 %)">
+        <button id="zoomOut" aria-label="Alejar">−</button>
+        <button id="zoomLabel" title="Volver al tamaño real (100 %)">100%</button>
+        <button id="zoomIn" aria-label="Acercar">+</button>
+        <button id="zoomFit">Ajustar</button>
+      </div>
       <button id="btnPreview" class="accent">▶ Vista previa</button>
     </div>
     <div class="stage-wrap" id="stageWrap">
@@ -88,7 +94,11 @@
         <div class="selbox" id="selbox" hidden><div class="handle" id="handle"></div></div>
       </div>
     </div>
-    <p class="hint center-hint">Clic para elegir una capa · arrastrá para mover (se imanta al centro; Alt lo desactiva) · rueda o esquina para escalar · flechas para ajustar 1 px (Shift = 10 px). Elegí <b>Foto</b> para mover o hacer zoom del recorte.</p>
+    <p class="hint center-hint">Clic para elegir una capa · arrastrá para mover (se imanta al centro; Alt lo desactiva) · rueda o esquina para escalar · flechas para ajustar 1 px (Shift = 10 px). Elegí <b>Foto</b> para mover o hacer zoom del recorte. La vista arranca al 100 % (tamaño real); + / − / 0 cambian el zoom de la vista.</p>
+    <section class="pvsec">
+      <div class="pvhead"><h3>Vista previa · tamaño real</h3><button id="btnReplay">Repetir</button></div>
+      <div class="preview" id="previewBox"><div class="pv" id="pv"><iframe id="preview" title="Vista previa" sandbox="allow-scripts allow-same-origin allow-popups"></iframe></div></div>
+    </section>
   </section>
 
   <aside class="inspector">
@@ -110,11 +120,6 @@
         <label>% <input id="selS" type="number" step="1"></label>
       </div>
       <button id="btnCover" hidden>Cubrir el banner</button>
-    </section>
-    <section>
-      <h3>Vista previa</h3>
-      <div class="preview" id="previewBox"><div class="pv" id="pv"><iframe id="preview" title="Vista previa" sandbox="allow-scripts allow-same-origin allow-popups"></iframe></div></div>
-      <button id="btnReplay">Repetir</button>
     </section>
     <section>
       <h3>Entregables</h3>
