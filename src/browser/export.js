@@ -9,6 +9,22 @@ const GSAP_LOCAL = new URL('../../vendor/gsap.min.js', import.meta.url);
 let gsapBlob = null;
 async function localGsap() { gsapBlob ||= await (await fetch(GSAP_LOCAL)).blob(); return gsapBlob; }
 
+// JPG con mozjpeg (WebAssembly), como en las entregas: mismo peso, más nitidez. Si no carga, usa el del navegador.
+let mozjpeg = null;
+async function encodeJpeg(canvas, q) {
+  if (mozjpeg === null) {
+    try { mozjpeg = (await import('../../vendor/jsquash-jpeg/encode.js')).default; } catch (e) { mozjpeg = false; }
+  }
+  if (mozjpeg) {
+    try {
+      const d = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+      const buf = await mozjpeg(d, { quality: Math.round(q * 100), progressive: true, optimize_coding: true });
+      return new Blob([buf], { type: 'image/jpeg' });
+    } catch (e) { mozjpeg = false; }
+  }
+  return toBlob(canvas, 'image/jpeg', q);
+}
+
 /** Elige el motor: CSS puro (más liviano) salvo que se use algo que necesite GSAP. */
 function makeHtml(plan, assets, { title, clickTag, embedGsap }) {
   if (!plan.gsap) return buildHtml(plan, assets, { title, clickTag });
@@ -28,12 +44,15 @@ export function renderFrameParts(plan) {
   return plan.frames.map((f, fi) => {
     let bg = null;
     if (f.bg) {
-      bg = newCanvas(W, H);
+      // Con foto original disponible, el fondo sale en 2x (retina); el HTML lo muestra al tamaño del banner.
+      const k = f.bg.hi ? f.bg.hi.k : 1;
+      bg = newCanvas(W * k, H * k);
       const ctx = bg.getContext('2d');
-      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W * k, H * k);
       ctx.imageSmoothingQuality = 'high';
-      const src = f.bg.s === 1 ? rasterToCanvas(f.bg.raster) : scaledCanvas(f.bg.raster, f.bg.s);
-      ctx.drawImage(src, Math.round(f.bg.x), Math.round(f.bg.y));
+      const r = f.bg.hi || f.bg.raster;
+      const src = f.bg.s === 1 ? rasterToCanvas(r) : scaledCanvas(r, f.bg.s);
+      ctx.drawImage(src, Math.round(f.bg.x * k), Math.round(f.bg.y * k));
     }
     const counters = { text: 0, logo: 0, cta: 0 };
     const items = {};
@@ -66,7 +85,7 @@ export function composeFinal(plan, parts, fi) {
   const c = newCanvas(W, H), ctx = c.getContext('2d');
   const p = parts[fi], f = plan.frames[fi];
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-  if (p.bg) ctx.drawImage(p.bg, 0, 0);
+  if (p.bg) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(p.bg, 0, 0, W, H); }
   const drawSh = (s) => { ctx.globalCompositeOperation = 'multiply'; ctx.drawImage(s.canvas, s.x, s.y); ctx.globalCompositeOperation = 'source-over'; };
   for (const s of f.shadows) if (!s.follows && p.shadows[s.id]) drawSh(p.shadows[s.id]);
   for (const it of f.items) {
@@ -85,7 +104,7 @@ async function encodeAssets(plan, parts, jpegQ) {
     const A = { bg: null, items: {}, shadows: {} };
     if (p.bg) {
       const name = `bg${i + 1}.jpg`;
-      files[name] = await toBlob(p.bg, 'image/jpeg', jpegQ);
+      files[name] = await encodeJpeg(p.bg, jpegQ);
       A.bg = { src: `images/${name}` };
     }
     for (const [id, a] of Object.entries(p.items)) {
@@ -107,7 +126,8 @@ async function encodeAssets(plan, parts, jpegQ) {
 export async function exportSize(project, size, { title, clickTag, maxKB = 228, baseName, onProgress, embedGsap = false } = {}) {
   const plan = buildPlan(project, size);
   const parts = renderFrameParts(plan);
-  const qualities = [0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5, 0.45, 0.4, 0.35];
+  // Calidad mozjpeg: los fondos 2x aguantan calidades bajas sin perder nitidez (igual que en las entregas).
+  const qualities = [0.82, 0.75, 0.68, 0.6, 0.52, 0.45, 0.4, 0.35, 0.3, 0.26, 0.22, 0.18];
   let best = null;
   for (const q of qualities) {
     onProgress?.(`Comprimiendo ${size} (JPG ${Math.round(q * 100)})…`);
@@ -145,7 +165,7 @@ export function encodeGif(plan, parts) {
 export async function previewHtml(project, size, opts) {
   const plan = buildPlan(project, size);
   const parts = renderFrameParts(plan);
-  const { files, assets } = await encodeAssets(plan, parts, 0.92);
+  const { files, assets } = await encodeAssets(plan, parts, 0.85);
   const urls = {};
   for (const [n, b] of Object.entries(files)) urls[`images/${n}`] = URL.createObjectURL(b);
   let html = makeHtml(plan, assets, { ...opts, embedGsap: false });

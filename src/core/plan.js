@@ -196,7 +196,7 @@ export function buildPlan(project, size) {
     for (const it of items) {
       if (it.kind !== 'text' && it.shadow) shadows.push({ id: `${it.id}s`, items: [it], params: it.shadow, anim: it.anim, start: it.start, dur: it.dur, follows: it.id });
     }
-    frames.push({ index: i, id: pf.id, start: t, dur: pf.duration, transition: ftKey, trDur: ft.dur, photoFx: pf.photoFx || project.photoFx || 'none', bg: src.bg && lay.bg ? { raster: src.bg.raster, ...lay.bg } : null, items, shadows });
+    frames.push({ index: i, id: pf.id, start: t, dur: pf.duration, transition: ftKey, trDur: ft.dur, photoFx: pf.photoFx || project.photoFx || 'none', bg: src.bg && lay.bg ? { raster: src.bg.raster, hi: src.bg.hi || null, ...lay.bg } : null, items, shadows });
     t += pf.duration;
   });
   return { W, H, size, transition: project.transition, trDur: tr.dur, total: t, frames, ctaFx: project.ctaFx || 'none', gsap: needsGsap(project) };

@@ -67,6 +67,8 @@ function flatten(layers, out = [], parentOpacity = 1) {
       isText: !!l.text,
       isSmart: !!l.placedLayer,
       shadow: readShadow(l.effects),
+      // Objeto inteligente: guarda la foto original embebida para armar fondos 2x.
+      smart: l.placedLayer && l.placedLayer.id && !l.mask ? { id: l.placedLayer.id, t: l.placedLayer.transform } : null,
     });
   }
   return out;
@@ -103,6 +105,13 @@ export function buildFrame(name, rect, layers) {
     const canvas = makeRaster(x1 - x0, y1 - y0);
     for (const l of bgLayers) compositeInto(canvas, x0, y0, l);
     bg = { raster: canvas, x: x0, y: y0 };
+    // Piezas del fondo, para recomponerlo en 2x con las fotos originales (si las hay).
+    if (bgLayers.some((l) => l.smart)) {
+      bg.parts = bgLayers.map((l) => ({
+        x: l.x - x0, y: l.y - y0, raster: l.raster, opacity: l.opacity,
+        smart: l.smart ? { id: l.smart.id, t: l.smart.t.map((v, i) => v - (i % 2 ? rect.top + y0 : rect.left + x0)) } : null,
+      }));
+    }
   }
 
   const elements = [];
@@ -150,7 +159,16 @@ export function psdToSources(readPsd, buffer) {
   frames.sort((a, b) => natCmp(a.name, b.name));
   const sizes = {};
   for (const f of frames) (sizes[`${f.w}x${f.h}`] ||= []).push(f);
-  return { sizes };
+  // Archivos embebidos (fotos originales) que usan los fondos, solo JPG/PNG.
+  const used = new Set();
+  for (const fs of Object.values(sizes)) for (const f of fs) for (const p of f.bg?.parts || []) if (p.smart) used.add(p.smart.id);
+  const linked = {};
+  for (const lf of psd.linkedFiles || []) {
+    if (!used.has(lf.id) || !lf.data) continue;
+    const head = lf.data[0] === 0xff && lf.data[1] === 0xd8 ? 'image/jpeg' : lf.data[0] === 0x89 && lf.data[1] === 0x50 ? 'image/png' : null;
+    if (head) linked[lf.id] = { type: head, data: lf.data };
+  }
+  return { sizes, linked };
 }
 
 /** PNG/JPG aplanados (uno por frame): solo fondo, sin capas separadas. */
