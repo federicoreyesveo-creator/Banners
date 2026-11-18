@@ -274,7 +274,8 @@ function setupStage() {
       else if (id) { S.sel = id; renderInspector(); }
       else { S.sel = null; updateSelBox(); return; }
       pushHistory();
-      drag = { mode: 'move', x: ev.clientX, y: ev.clientY, fx: 0, fy: 0 };
+      const g0 = selGeom();
+      drag = { mode: 'move', x: ev.clientX, y: ev.clientY, sx: g0 ? g0.L.x : 0, sy: g0 ? g0.L.y : 0 };
     }
     stage.setPointerCapture(ev.pointerId);
     updateSelBox();
@@ -283,16 +284,25 @@ function setupStage() {
   stage.addEventListener('pointermove', (ev) => {
     if (!drag) return;
     if (drag.mode === 'move') {
-      drag.fx += (ev.clientX - drag.x) / zoom; drag.fy += (ev.clientY - drag.y) / zoom;
-      drag.x = ev.clientX; drag.y = ev.clientY;
-      const dx = Math.trunc(drag.fx), dy = Math.trunc(drag.fy);
-      if (dx || dy) { drag.fx -= dx; drag.fy -= dy; moveSel(dx, dy); }
+      const g = selGeom(); if (!g) return;
+      let nx = drag.sx + (ev.clientX - drag.x) / zoom, ny = drag.sy + (ev.clientY - drag.y) / zoom;
+      // Imán al centro del banner (Alt lo desactiva). Umbral de 6 px en pantalla.
+      const { w: W, h: H } = parseSize(S.cur);
+      const th = 6 / zoom;
+      let snapV = false, snapH = false;
+      if (!ev.altKey) {
+        if (Math.abs(nx + g.w / 2 - W / 2) < th) { nx = W / 2 - g.w / 2; snapV = true; }
+        if (Math.abs(ny + g.h / 2 - H / 2) < th) { ny = H / 2 - g.h / 2; snapH = true; }
+      }
+      showGuides(snapV, snapH);
+      const rx = Math.round(nx), ry = Math.round(ny);
+      if (rx !== g.L.x || ry !== g.L.y) { g.L.x = rx; g.L.y = ry; syncSelected(); }
     } else {
       const dw = (ev.clientX - drag.x0) / zoom;
       scaleSel(drag.s0 * (drag.w0 + dw) / drag.w0, drag.anchor);
     }
   });
-  const end = () => { if (drag) { drag = null; refreshPreviewSoon(); } };
+  const end = () => { showGuides(false, false); if (drag) { drag = null; refreshPreviewSoon(); } };
   stage.addEventListener('pointerup', end);
   stage.addEventListener('pointercancel', end);
   $('stageWrap').addEventListener('wheel', (ev) => {
@@ -317,6 +327,13 @@ function setupStage() {
   window.addEventListener('resize', () => S.project && renderStage());
 }
 let wheelTimer = 0;
+function showGuides(v, h) {
+  const { w: W, h: H } = parseSize(S.cur);
+  const gv = $('guideV'), gh = $('guideH');
+  gv.hidden = !v; gh.hidden = !h;
+  // La línea cae exactamente en el centro del banner, a la escala del editor.
+  gv.style.left = `${(W / 2) * zoom}px`; gh.style.top = `${(H / 2) * zoom}px`;
+}
 
 // ---------- inspector ----------
 function renderInspector() {

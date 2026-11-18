@@ -114,3 +114,7 @@ input[type=checkbox], input[type=radio] { width: auto; }
 .preview { display: block; }
 .preview .pv { position: relative; margin: 0 auto; overflow: hidden; }
 .preview .pv iframe { position: absolute; left: 0; top: 0; }
+
+.guide { position: absolute; pointer-events: none; background: #ff2fa8; z-index: 3; }
+.guide.v { top: -2000px; bottom: -2000px; width: 2px; margin-left: -1px; }
+.guide.h { left: -2000px; right: -2000px; height: 2px; margin-top: -1px; }
