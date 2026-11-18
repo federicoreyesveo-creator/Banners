@@ -5,8 +5,10 @@
   --stage: #2a2926; --chip: #efede8;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #181816; --panel: #22211f; --ink: #edeae4; --muted: #9a958c; --line: #34322e; --chip: #2e2c29; --stage: #111110; }
+  :root:not([data-theme="light"]) { color-scheme: dark; --bg: #181816; --panel: #22211f; --ink: #edeae4; --muted: #9a958c; --line: #34322e; --chip: #2e2c29; --stage: #111110; }
 }
+:root[data-theme="dark"] { color-scheme: dark; --bg: #181816; --panel: #22211f; --ink: #edeae4; --muted: #9a958c; --line: #34322e; --chip: #2e2c29; --stage: #111110; }
+
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body { background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }

@@ -396,6 +396,24 @@ async function refreshPreview() {
   f.srcdoc = html;
 }
 
+// ---------- descargas ----------
+// Dentro de un Artifact de claude.ai las descargas pasan por la capacidad "downloads"; afuera, links normales.
+let dl = null;
+if (window.claude && window.claude.use) window.claude.use('downloads').then((d) => { dl = d; }).catch(() => {});
+function downloadLink(blob, filename, label) {
+  const a = document.createElement('a');
+  a.textContent = label;
+  if (window.claude && window.claude.use) {
+    a.href = '#';
+    a.onclick = async (ev) => {
+      ev.preventDefault();
+      if (!dl) { status('Este visor no permite descargar archivos.'); return; }
+      try { await dl.save({ filename, data: blob }); } catch (e) { status(`No se descargó: ${e.code || e.message || e}`); }
+    };
+  } else { a.href = URL.createObjectURL(blob); a.download = filename; }
+  return a;
+}
+
 // ---------- exportación ----------
 async function generateAll() {
   if (!S.project) return;
@@ -414,19 +432,19 @@ async function generateAll() {
       const zu = URL.createObjectURL(r.zip), gu = URL.createObjectURL(r.gif);
       const d = document.createElement('div'); d.className = 'out';
       d.innerHTML = `<div class="head"><span>${size}</span><span class="${r.fits ? 'ok' : 'bad'}">${kb(r.zip.size)}${r.fits ? '' : ` · pasa de ${maxKB} KB`}</span></div>
-        <div><a href="${zu}" download="${zipName}">ZIP HTML5</a><a href="${gu}" download="${gifName}">GIF (${kb(r.gif.size)})</a></div>
+        <div class="dl"></div>
         <div class="hint">JPG calidad ${Math.round(r.quality * 100)} · ${r.plan.frames.length} frames · ${r.plan.total.toFixed(1)} s</div>
         <img src="${gu}" alt="GIF ${size}">`;
+      d.querySelector('.dl').append(downloadLink(r.zip, zipName, 'ZIP HTML5'), downloadLink(r.gif, gifName, `GIF (${kb(r.gif.size)})`));
       outBox.appendChild(d);
+      void zu;
       r.zipName = zipName; r.gifName = gifName;
     }
     if (results.length > 1) {
       const all = new window.JSZip();
       for (const r of results) { all.file(r.zipName, r.zip); all.file(r.gifName, r.gif); }
       const blob = await all.generateAsync({ type: 'blob' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob); a.download = `${base}_entregables.zip`; a.textContent = `Descargar todo (${kb(blob.size)})`;
-      a.className = 'primary';
+      const a = downloadLink(blob, `${base}_entregables.zip`, `Descargar todo (${kb(blob.size)})`);
       const p = document.createElement('p'); p.appendChild(a); outBox.prepend(p);
     }
     status(`Listo: ${results.length} tamaño${results.length === 1 ? '' : 's'}`);
