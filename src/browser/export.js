@@ -2,6 +2,18 @@
 import { buildPlan } from '../core/plan.js';
 import { buildShadow } from '../core/raster.js';
 import { buildHtml } from '../core/html.js';
+import { buildGsapHtml } from '../core/html-gsap.js';
+import { GSAP_CDN } from '../core/plan.js';
+
+const GSAP_LOCAL = new URL('../../vendor/gsap.min.js', import.meta.url);
+let gsapBlob = null;
+async function localGsap() { gsapBlob ||= await (await fetch(GSAP_LOCAL)).blob(); return gsapBlob; }
+
+/** Elige el motor: CSS puro (más liviano) salvo que se use algo que necesite GSAP. */
+function makeHtml(plan, assets, { title, clickTag, embedGsap }) {
+  if (!plan.gsap) return buildHtml(plan, assets, { title, clickTag });
+  return buildGsapHtml(plan, assets, { title, clickTag, gsapSrc: embedGsap ? 'gsap.min.js' : GSAP_CDN });
+}
 import { rasterToCanvas, scaledCanvas, newCanvas, toBlob, encodeShadowPng } from './canvas.js';
 import { GIFEncoder, quantize, applyPalette } from '../../vendor/gifenc.esm.js';
 
@@ -92,7 +104,7 @@ async function encodeAssets(plan, parts, jpegQ) {
 }
 
 /** Exporta un tamaño: ZIP HTML5 bajo el peso máximo (bajando calidad JPG si hace falta) + GIF. */
-export async function exportSize(project, size, { title, clickTag, maxKB = 228, baseName, onProgress } = {}) {
+export async function exportSize(project, size, { title, clickTag, maxKB = 228, baseName, onProgress, embedGsap = false } = {}) {
   const plan = buildPlan(project, size);
   const parts = renderFrameParts(plan);
   const qualities = [0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5, 0.45, 0.4, 0.35];
@@ -100,9 +112,10 @@ export async function exportSize(project, size, { title, clickTag, maxKB = 228, 
   for (const q of qualities) {
     onProgress?.(`Comprimiendo ${size} (JPG ${Math.round(q * 100)})…`);
     const { files, assets } = await encodeAssets(plan, parts, q);
-    const html = buildHtml(plan, assets, { title, clickTag });
+    const html = makeHtml(plan, assets, { title, clickTag, embedGsap });
     const zip = new (JSZip())();
     zip.file('index.html', html);
+    if (plan.gsap && embedGsap) zip.file('gsap.min.js', await localGsap());
     const img = zip.folder('images');
     for (const [n, b] of Object.entries(files)) img.file(n, b);
     const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 9 } });
@@ -135,7 +148,9 @@ export async function previewHtml(project, size, opts) {
   const { files, assets } = await encodeAssets(plan, parts, 0.92);
   const urls = {};
   for (const [n, b] of Object.entries(files)) urls[`images/${n}`] = URL.createObjectURL(b);
-  let html = buildHtml(plan, assets, opts);
+  let html = makeHtml(plan, assets, { ...opts, embedGsap: false });
+  // La vista previa usa la copia local de GSAP (dentro de la app no se puede cargar el CDN de Google).
+  if (plan.gsap) { const u = URL.createObjectURL(await localGsap()); urls['__gsap'] = u; html = html.replace(GSAP_CDN, u); }
   html = html.replace(/images\/[\w.-]+/g, (m) => urls[m] || m);
   return { html, urls: Object.values(urls), plan };
 }

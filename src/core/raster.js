@@ -195,3 +195,31 @@ export function buildShadow(items, shadow, canvasW, canvasH, scaleOverride, sigm
   if (!bb) return null;
   return { raster: crop(vis, bb.x, bb.y, bb.w, bb.h), x: ox + vx0 + bb.x, y: oy + vy0 + bb.y };
 }
+
+/**
+ * Separa un renglón en columnas (letras o palabras) buscando columnas transparentes.
+ * minGap: ancho mínimo del hueco para cortar. Devuelve [[x0, x1], ...] en px del raster.
+ */
+export function splitColumns(r, minGap = 1) {
+  const { w, h, data } = r;
+  const col = new Uint8Array(w);
+  for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) if (data[(y * w + x) * 4 + 3] > 24) { col[x] = 1; break; }
+  const segs = [];
+  let start = -1, gap = 0;
+  for (let x = 0; x <= w; x++) {
+    const on = x < w && col[x];
+    if (on) { if (start < 0) start = x; gap = 0; }
+    else if (start >= 0) {
+      gap++;
+      if (gap >= minGap || x === w) { segs.push([start, x - gap + 1]); start = -1; gap = 0; }
+    }
+  }
+  // Une restos muy finos (puntos, comas) con el segmento anterior.
+  const out = [];
+  for (const s of segs) {
+    const last = out[out.length - 1];
+    if (last && s[1] - s[0] < 3) last[1] = s[1]; else out.push([s[0], s[1]]);
+  }
+  // Los cortes caen en el medio de cada hueco, así ningún pixel queda afuera.
+  return out.map((s, i) => [i === 0 ? 0 : Math.floor((out[i - 1][1] + s[0]) / 2), i === out.length - 1 ? w : Math.floor((s[1] + out[i + 1][0]) / 2)]);
+}

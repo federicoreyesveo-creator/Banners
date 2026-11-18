@@ -13,6 +13,7 @@ App web (100 % en el navegador, sin servidor ni API) que convierte un PSD o un Z
 - No toca el diseño: los textos y logos salen con los pixeles del PSD.
 - Sombra paralela reconstruida desde los efectos del PSD (tamaño, extensión, opacidad), como un único PNG suave con alfa completo por frame (calibrada contra los PNG exportados de Photoshop).
 - Textos, logo y botón entran por separado: fade + 16 px, 0,375 s, quadOut, sin motion blur. El logo entra con escala y el botón un segundo después.
+- Motor CSS (0 KB extra) por defecto. Si elegís transiciones como deslizar, zoom, diagonal, círculo, máscara o desenfoque, efectos de foto (Ken Burns, parallax), texto por letra, por palabra o máquina de escribir, o pulso o brillo en el botón, el banner pasa a GSAP: se carga del CDN de Google (s0.2mdn.net, no cuenta en el peso en Google Ads, DV360 y CM360) o va dentro del ZIP si lo pedís.
 - Sin loop, termina en el CTA, ~12-14 s. `var clickTag = "..."` + `window.open(window.clickTag)`.
 - El ZIP se mantiene bajo el peso máximo bajando la calidad de los JPG solo lo necesario.
 - GIF con paleta propia por cuadro para evitar banding en las sombras.

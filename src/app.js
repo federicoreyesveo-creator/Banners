@@ -1,5 +1,5 @@
 // Interfaz: carga, editor visual, vista previa y exportación.
-import { ANIMS, TRANSITIONS, PRESET_SIZES, parseSize, defaultDurations, defaultAnims, identityLayout, autoLayout, buildPlan } from './core/plan.js';
+import { ANIMS, TRANSITIONS, PHOTO_FX, CTA_FX, needsGsap, PRESET_SIZES, parseSize, defaultDurations, defaultAnims, identityLayout, autoLayout, buildPlan } from './core/plan.js';
 import { buildShadow } from './core/raster.js';
 import { interpretPrompt } from './core/prompt.js';
 import { ingest } from './browser/ingest.js';
@@ -35,7 +35,7 @@ function buildProject(sources) {
     for (const f of Object.values(pf.sources)) Object.assign(pf.anims, defaultAnims(f, i));
     return pf;
   });
-  return { master, frames, transition: currentTransition(), layouts: {} };
+  return { master, frames, transition: currentTransition(), photoFx: $('photoFx').value, ctaFx: $('ctaFx').value, layouts: {} };
 }
 
 function ensureLayout(size) {
@@ -357,6 +357,9 @@ function showGuides(v, h) {
 function renderInspector() {
   const pf = curPF(), src = curSrc(), lay = curLay();
   $('duration').value = pf.duration;
+  $('frameTransition').value = pf.transition || ''; $('frameTransition').disabled = S.frame === 0;
+  $('framePhotoFx').value = pf.photoFx || '';
+  renderEngine();
   const box = $('layers'); box.innerHTML = '';
   if (src.bg) {
     const d = document.createElement('div');
@@ -377,7 +380,7 @@ function renderInspector() {
     d.onclick = (ev) => { if (ev.target.closest('select,input')) return; S.sel = e.id; updateSelBox(); };
     const [chk, sel, del] = d.querySelectorAll('input[type=checkbox], select, input[type=number]');
     chk.onchange = () => { pushHistory(); L.hidden = !chk.checked; renderStage(); renderInspector(); scheduleThumbs(); refreshPreviewSoon(); };
-    sel.onchange = () => { pushHistory(); a.anim = sel.value; refreshPreviewSoon(); };
+    sel.onchange = () => { pushHistory(); a.anim = sel.value; renderEngine(); refreshPreviewSoon(); };
     del.onchange = () => { pushHistory(); a.delay = Math.max(0, parseFloat(del.value) || 0); refreshPreviewSoon(); };
     box.appendChild(d);
   }
@@ -465,14 +468,14 @@ async function generateAll() {
   try {
     for (const size of S.sizes) {
       ensureLayout(size);
-      const r = await exportSize(S.project, size, { title: `${title} ${size}`, clickTag, maxKB, onProgress: (t) => busy(true, t) });
+      const r = await exportSize(S.project, size, { title: `${title} ${size}`, clickTag, maxKB, embedGsap: $('embedGsap').checked, onProgress: (t) => busy(true, t) });
       results.push(r);
       const zipName = `${base}_${size}_HTML5.zip`, gifName = `${base}_${size}_backup.gif`;
       const zu = URL.createObjectURL(r.zip), gu = URL.createObjectURL(r.gif);
       const d = document.createElement('div'); d.className = 'out';
       d.innerHTML = `<div class="head"><span>${size}</span><span class="${r.fits ? 'ok' : 'bad'}">${kb(r.zip.size)}${r.fits ? '' : ` · pasa de ${maxKB} KB`}</span></div>
         <div class="dl"></div>
-        <div class="hint">JPG calidad ${Math.round(r.quality * 100)} · ${r.plan.frames.length} frames · ${r.plan.total.toFixed(1)} s</div>
+        <div class="hint">${r.plan.gsap ? "GSAP" : "CSS"} · JPG calidad ${Math.round(r.quality * 100)} · ${r.plan.frames.length} frames · ${r.plan.total.toFixed(1)} s</div>
         <img src="${gu}" alt="GIF ${size}">`;
       d.querySelector('.dl').append(downloadLink(r.zip, zipName, 'ZIP HTML5'), downloadLink(r.gif, gifName, `GIF (${kb(r.gif.size)})`));
       outBox.appendChild(d);
@@ -495,10 +498,17 @@ async function generateAll() {
 }
 
 // ---------- panel izquierdo ----------
-function currentTransition() { return document.querySelector('#transition .on')?.dataset.v || 'wipe'; }
+function currentTransition() { return $('transition').value || 'wipe'; }
+function fillSelect(sel, map, extra) {
+  sel.innerHTML = (extra ? `<option value="">${extra}</option>` : '') + Object.entries(map).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
+}
+function renderEngine() {
+  const g = S.project ? needsGsap(S.project) : false;
+  $('engineInfo').innerHTML = g ? 'Motor: <b>GSAP</b> (por los efectos elegidos)' : 'Motor: <b>CSS</b> (0 KB extra). Pasa a GSAP solo si elegís un efecto que lo necesita.';
+}
 function setTransition(v) {
-  for (const b of document.querySelectorAll('#transition button')) b.classList.toggle('on', b.dataset.v === v);
-  if (S.project) { S.project.transition = v; renderTabs(); refreshPreviewSoon(); }
+  $('transition').value = v;
+  if (S.project) { S.project.transition = v; renderTabs(); renderEngine(); refreshPreviewSoon(); }
 }
 
 function applyPrompt() {
@@ -533,7 +543,14 @@ function setup() {
     loadSources(res);
     $('ingestInfo').textContent = `Ejemplo: ${S.project.frames.length} frames · 300x250 con capas separadas.`;
   };
-  for (const b of document.querySelectorAll('#transition button')) b.onclick = () => setTransition(b.dataset.v);
+  fillSelect($('transition'), TRANSITIONS); fillSelect($('photoFx'), PHOTO_FX); fillSelect($('ctaFx'), CTA_FX);
+  fillSelect($('frameTransition'), TRANSITIONS, 'Igual que el resto'); fillSelect($('framePhotoFx'), PHOTO_FX, 'Igual que el resto');
+  $('transition').onchange = () => setTransition($('transition').value);
+  $('photoFx').onchange = () => { if (S.project) { S.project.photoFx = $('photoFx').value; renderEngine(); refreshPreviewSoon(); } };
+  $('ctaFx').onchange = () => { if (S.project) { S.project.ctaFx = $('ctaFx').value; renderEngine(); refreshPreviewSoon(); } };
+  $('frameTransition').onchange = () => { if (!S.project) return; pushHistory(); curPF().transition = $('frameTransition').value || null; renderEngine(); refreshPreviewSoon(); };
+  $('framePhotoFx').onchange = () => { if (!S.project) return; pushHistory(); curPF().photoFx = $('framePhotoFx').value || null; renderEngine(); refreshPreviewSoon(); };
+  renderEngine();
   $('addSize').onclick = () => {
     const m = $('customSize').value.match(/(\d{2,4})\s*[x×]\s*(\d{2,4})/);
     if (m) { toggleSize(`${m[1]}x${m[2]}`, true); $('customSize').value = ''; }

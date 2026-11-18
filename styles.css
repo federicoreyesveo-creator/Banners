@@ -129,3 +129,8 @@ input[type=checkbox], input[type=radio] { width: auto; }
 .pvsec .pvhead { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .pvsec .pvhead h3 { margin: 0; }
 .pvsec .preview { margin: 0; }
+
+select { padding: 6px 8px; margin-top: 4px; color: var(--ink); }
+.check { display: flex; gap: 8px; align-items: center; font-size: 13px; margin-top: 8px; }
+.engine { font-size: 12px; margin: 10px 0 0; padding: 6px 8px; border-radius: 8px; background: var(--chip); }
+.engine b { color: var(--accent); }

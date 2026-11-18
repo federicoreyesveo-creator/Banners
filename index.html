@@ -40,11 +40,13 @@
 
     <section>
       <h3>3 · Animación</h3>
-      <div class="seg" id="transition">
-        <button data-v="wipe" class="on">Barrido</button>
-        <button data-v="fade">Fundido</button>
-      </div>
-      <p class="hint">Textos, logo y botón entran por separado (fade + 16 px, 0,375 s, quadOut). Sin loop, termina en el CTA.</p>
+      <label class="field">Transición entre frames <select id="transition"></select></label>
+      <label class="field">Efecto de la foto <select id="photoFx"></select></label>
+      <label class="field">Botón al final <select id="ctaFx"></select></label>
+      <p class="hint">Textos, logo y botón entran por separado (fade + 16 px, 0,375 s, quadOut). Sin loop, termina en el CTA. Cada frame y cada capa se pueden cambiar a la derecha.</p>
+      <p id="engineInfo" class="engine"></p>
+      <label class="check"><input type="checkbox" id="embedGsap"> Incluir GSAP dentro del ZIP</label>
+      <p class="hint">Si no, GSAP se carga del CDN de Google (s0.2mdn.net), que Google Ads, DV360 y CM360 no cuentan en el peso. Activalo para plataformas que piden todo adentro del ZIP (suma ~28 KB).</p>
     </section>
 
     <section>
@@ -105,6 +107,8 @@
     <section>
       <h3>Frame</h3>
       <label class="field inline">Duración (s) <input id="duration" type="number" step="0.1" min="0.5" max="10"></label>
+      <label class="field">Entrada de este frame <select id="frameTransition"></select></label>
+      <label class="field">Foto de este frame <select id="framePhotoFx"></select></label>
       <p id="totalInfo" class="hint"></p>
     </section>
     <section>

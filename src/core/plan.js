@@ -1,4 +1,5 @@
 // Modelo del proyecto, layout por tamaño y línea de tiempo. Sin DOM.
+import { splitColumns } from './raster.js';
 
 export const ANIMS = {
   fromL: { label: 'Entra desde la izquierda', dur: 0.375, ease: 'cubic-bezier(.25,.46,.45,.94)', from: 'translateX(-16px)' },
@@ -8,13 +9,56 @@ export const ANIMS = {
   fade: { label: 'Fundido', dur: 0.375, ease: 'cubic-bezier(.25,.46,.45,.94)', from: '' },
   zoom: { label: 'Zoom (escala)', dur: 0.375, ease: 'cubic-bezier(.215,.61,.355,1)', from: 'scale(1.27)' },
   zoomL: { label: 'Zoom logo', dur: 0.5, ease: 'cubic-bezier(.215,.61,.355,1)', from: 'scale(1.28)' },
+  letters: { label: 'Letra por letra (GSAP)', dur: 0.3, ease: 'power1.out', from: '', split: 'letters', stagger: 0.03, gsap: true },
+  words: { label: 'Palabra por palabra (GSAP)', dur: 0.375, ease: 'power1.out', from: '', split: 'words', stagger: 0.08, gsap: true },
+  typewriter: { label: 'Máquina de escribir (GSAP)', dur: 0.01, ease: 'none', from: '', split: 'letters', stagger: 0.045, gsap: true },
   none: { label: 'Sin animación', dur: 0, ease: 'linear', from: '' },
 };
 
-export const TRANSITIONS = {
-  wipe: { label: 'Barrido', dur: 0.5, textLag: 0.415 },
-  fade: { label: 'Fundido', dur: 0.4, textLag: 0.45 },
+/** Efectos de la foto de fondo (terminan siempre en la posición del diseño). */
+export const PHOTO_FX = {
+  none: { label: 'Sin efecto' },
+  kenburns: { label: 'Ken Burns (zoom lento)', gsap: true },
+  parallax: { label: 'Parallax (desplazamiento lento)', gsap: true },
 };
+
+/** Efecto del botón al final. */
+export const CTA_FX = {
+  none: { label: 'Sin efecto' },
+  pulse: { label: 'Pulso', gsap: true },
+  shine: { label: 'Brillo', gsap: true },
+};
+
+export const GSAP_CDN = 'https://s0.2mdn.net/ads/studio/cached_libs/gsap_3.12.5_min.js';
+
+export const TRANSITIONS = {
+  wipe: { label: 'Barrido', dur: 0.5, textLag: 0.415, css: true },
+  fade: { label: 'Fundido', dur: 0.4, textLag: 0.45, css: true },
+  slide: { label: 'Deslizar (empuja)', dur: 0.5, textLag: 0.45 },
+  zoom: { label: 'Zoom', dur: 0.5, textLag: 0.45 },
+  diagonal: { label: 'Barrido diagonal', dur: 0.6, textLag: 0.5 },
+  circle: { label: 'Círculo', dur: 0.6, textLag: 0.5 },
+  mask: { label: 'Máscara desde el centro', dur: 0.5, textLag: 0.45 },
+  blur: { label: 'Desenfoque', dur: 0.5, textLag: 0.45 },
+};
+
+const frameTransition = (project, pf) => (pf.transition && TRANSITIONS[pf.transition] ? pf.transition : project.transition);
+
+/** ¿Hace falta GSAP? Solo cuando se usa algo que CSS puro de este motor no cubre (o si se pidió GSAP). */
+export function needsGsap(project) {
+  if (project.engine === 'gsap') return true;
+  if (project.ctaFx && project.ctaFx !== 'none') return true;
+  const trs = new Set(project.frames.slice(1).map((pf) => frameTransition(project, pf)));
+  if (trs.size > 1) return true;
+  for (const t of trs) if (!TRANSITIONS[t]?.css) return true;
+  if (!TRANSITIONS[project.transition]?.css) return true;
+  for (const pf of project.frames) {
+    const fx = pf.photoFx || project.photoFx;
+    if (fx && fx !== 'none') return true;
+    for (const a of Object.values(pf.anims)) if (ANIMS[a.anim]?.gsap) return true;
+  }
+  return false;
+}
 
 export const PRESET_SIZES = ['300x250', '728x90', '160x600', '300x600', '320x50', '970x250', '336x280', '320x480'];
 
@@ -94,25 +138,34 @@ export function buildPlan(project, size) {
   project.frames.forEach((pf, i) => {
     const src = pf.sources[size] || pf.sources[project.master];
     const lay = project.layouts[size][pf.id];
-    const textStart = i === 0 ? 0.21 : t + tr.textLag;
+    const ftKey = frameTransition(project, pf);
+    const ft = TRANSITIONS[ftKey] || tr;
+    const textStart = i === 0 ? 0.21 : t + ft.textLag;
     const items = src.elements.filter((e) => !(lay.el[e.id] && lay.el[e.id].hidden)).map((e) => {
       const L = lay.el[e.id] || { x: e.x, y: e.y, s: 1 };
       const a = pf.anims[e.id] || { anim: 'fade', delay: 0 };
       const spec = ANIMS[a.anim] || ANIMS.fade;
-      return { id: e.id, kind: e.kind, name: e.name, raster: e.raster, shadow: e.shadow, x: L.x, y: L.y, s: L.s, anim: a.anim, start: textStart + (a.delay || 0), dur: spec.dur };
+      const it = { id: e.id, kind: e.kind, name: e.name, raster: e.raster, shadow: e.shadow, x: L.x, y: L.y, s: L.s, anim: a.anim, start: textStart + (a.delay || 0), dur: spec.dur };
+      if (spec.split) {
+        // Letras o palabras recortadas de la misma imagen: no cambia el diseño ni suma archivos.
+        const gap = spec.split === 'words' ? Math.max(3, Math.round(e.raster.h * 0.22)) : 1;
+        it.segs = splitColumns(e.raster, gap);
+        it.dur = spec.dur + spec.stagger * Math.max(0, it.segs.length - 1);
+      }
+      return it;
     });
     // Una sola sombra suave por frame para los textos; logo y botón llevan la suya y se animan con su elemento.
     const shadows = [];
     const textSh = items.filter((it) => it.kind === 'text' && it.shadow);
     if (textSh.length) {
       const first = textSh.reduce((a, b) => (a.start <= b.start ? a : b));
-      shadows.push({ id: `sh${i + 1}`, items: textSh, params: textSh[0].shadow, anim: 'fade', start: first.start, dur: 0.375, follows: null });
+      shadows.push({ id: `sh${i + 1}`, items: textSh, params: textSh[0].shadow, anim: 'fade', start: first.start, dur: Math.max(0.375, Math.min(1.2, first.dur)), follows: null });
     }
     for (const it of items) {
       if (it.kind !== 'text' && it.shadow) shadows.push({ id: `${it.id}s`, items: [it], params: it.shadow, anim: it.anim, start: it.start, dur: it.dur, follows: it.id });
     }
-    frames.push({ index: i, id: pf.id, start: t, dur: pf.duration, bg: src.bg && lay.bg ? { raster: src.bg.raster, ...lay.bg } : null, items, shadows });
+    frames.push({ index: i, id: pf.id, start: t, dur: pf.duration, transition: ftKey, trDur: ft.dur, photoFx: pf.photoFx || project.photoFx || 'none', bg: src.bg && lay.bg ? { raster: src.bg.raster, ...lay.bg } : null, items, shadows });
     t += pf.duration;
   });
-  return { W, H, size, transition: project.transition, trDur: tr.dur, total: t, frames };
+  return { W, H, size, transition: project.transition, trDur: tr.dur, total: t, frames, ctaFx: project.ctaFx || 'none', gsap: needsGsap(project) };
 }
