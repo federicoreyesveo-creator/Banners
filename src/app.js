@@ -377,6 +377,15 @@ function showGuides(v, h) {
   gv.style.left = `${(W / 2) * zoom}px`; gh.style.top = `${(H / 2) * zoom}px`;
 }
 
+// Íconos por tipo de capa (trazo de 1.5, como el resto de la interfaz).
+const KIND = {
+  bg: { label: 'Foto', svg: '<rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><circle cx="6" cy="6.75" r="1.1"/><path d="m2.75 11.5 3.25-3 2.25 2 2-1.75 3 2.75"/>' },
+  text: { label: 'Texto', svg: '<path d="M3.5 4.5V3h9v1.5M8 3v10M6.25 13h3.5"/>' },
+  logo: { label: 'Logo', svg: '<path d="M8 2.5 9.6 6l3.9.4-2.9 2.6.8 3.8L8 10.9l-3.4 1.9.8-3.8L2.5 6.4 6.4 6z"/>' },
+  cta: { label: 'Botón', svg: '<rect x="2" y="4.5" width="12" height="6" rx="3"/><path d="M7.5 9.5 9 14l.9-1.6 1.7-.3z"/>' },
+};
+const kindIcon = (k) => { const v = KIND[k] || KIND.text; return `<span class="ki" title="${v.label}" aria-label="${v.label}" role="img"><svg viewBox="0 0 16 16" aria-hidden="true">${v.svg}</svg></span>`; };
+
 // ---------- inspector ----------
 function renderInspector() {
   const pf = curPF(), src = curSrc(), lay = curLay();
@@ -388,18 +397,17 @@ function renderInspector() {
   if (src.bg) {
     const d = document.createElement('div');
     d.className = 'layer' + (S.sel === 'bg' ? ' on' : ''); d.dataset.id = 'bg';
-    d.innerHTML = `<div class="name"><span class="k">foto</span><em>Fondo</em></div>`;
+    d.innerHTML = `<div class="name">${kindIcon('bg')}<em>Fondo</em></div>`;
     d.onclick = () => selectLayer('bg');
     box.appendChild(d);
   }
-  const kindLabel = { text: 'texto', logo: 'logo', cta: 'botón' };
   for (const e of src.elements) {
     const L = lay.el[e.id] || (lay.el[e.id] = { x: e.x, y: e.y, s: 1 });
     const a = pf.anims[e.id] || (pf.anims[e.id] = { anim: 'fade', delay: 0 });
     const d = document.createElement('div');
     d.className = 'layer' + (S.sel === e.id ? ' on' : '') + (L.hidden ? ' off' : ''); d.dataset.id = e.id;
     const nm = shortName(e.name).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-    d.innerHTML = `<div class="name"><span class="k">${kindLabel[e.kind] || e.kind}</span><em title="${nm}">${nm}</em><input type="checkbox" ${L.hidden ? '' : 'checked'} aria-label="Visible: ${nm}"></div>` +
+    d.innerHTML = `<div class="name">${kindIcon(e.kind)}<em title="${nm}">${nm}</em><input type="checkbox" ${L.hidden ? '' : 'checked'} aria-label="Visible: ${nm}"></div>` +
       (S.sel === e.id ? `<select aria-label="Animación de entrada">${Object.entries(ANIMS).map(([k, v]) => `<option value="${k}" ${k === a.anim ? 'selected' : ''}>${v.label}</option>`).join('')}</select>` : '');
     d.onclick = (ev) => { if (ev.target.closest('select,input')) return; selectLayer(e.id); };
     const chk = d.querySelector('input[type=checkbox]'), sel = d.querySelector('select');
@@ -598,14 +606,13 @@ function renderTimeline() {
   const pct = (t) => `${(t / span) * 100}%`;
   const step = span > 6 ? 1 : 0.5;
   for (let t = 0; t <= span - 0.1; t += step) { const sp = document.createElement('span'); sp.style.left = pct(t); sp.textContent = `${fmt(t)}s`; ruler.appendChild(sp); }
-  const kindLabel = { text: 'texto', logo: 'logo', cta: 'botón' };
   const tracks = [];
   if (!items.length) { const p = document.createElement('div'); p.className = 'tl-empty'; p.textContent = 'Este frame no tiene capas para animar.'; p.style.gridColumn = '1 / 3'; grid.appendChild(p); }
   for (const { it, t0, t1 } of items) {
     const a = pf.anims[it.id];
     const name = document.createElement('div');
     name.className = 'tl-name' + (S.sel === it.id ? ' on' : ''); name.dataset.id = it.id;
-    name.innerHTML = `<span class="k">${kindLabel[it.kind] || it.kind}</span><em></em>`;
+    name.innerHTML = `${kindIcon(it.kind)}<em></em>`;
     name.querySelector('em').textContent = shortName(it.name); name.title = it.name;
     name.onclick = () => selectLayer(it.id);
     const track = document.createElement('div'); track.className = 'tl-track';
@@ -732,6 +739,8 @@ function setupSplits() {
 }
 
 function setup() {
+  // Tema oscuro por defecto.
+  document.documentElement.dataset.theme = 'dark';
   // Se suelta el archivo en cualquier lado de la pantalla (el editor vacío es la zona marcada).
   $('file').onchange = (e) => handleFiles([...e.target.files]);
   const work = $('work');
