@@ -205,7 +205,17 @@ function renderStage() {
     placeEl(c, L.x, L.y, e.raster.w * L.s, e.raster.h * L.s);
     world.appendChild(c);
   }
-  updateShadow(); updateSelBox();
+  updateShadow(); updateSelBox(); updateWarn();
+}
+// Aviso cuando algo queda tan agrandado que se va a ver pixelado.
+function updateWarn() {
+  const lay = curLay(), w = $('stageWarn');
+  const msgs = [];
+  if (lay.bg && lay.bg.s > 1.5) msgs.push(`La foto está agrandada al <b>${Math.round(lay.bg.s * 100)}%</b> y se puede ver pixelada. Para este tamaño conviene una foto en más resolución o armarlo en el PSD.`);
+  const big = Object.values(lay.el).filter((L) => !L.hidden && L.s > 1.3).length;
+  if (big) msgs.push(`Hay ${big} capa${big > 1 ? 's' : ''} agrandada${big > 1 ? 's' : ''} más de 130%: el texto puede verse borroso.`);
+  w.innerHTML = msgs.join('<br>');
+  w.hidden = !msgs.length;
 }
 function cloneCanvas(src) { const c = newCanvas(src.width, src.height); c.getContext('2d').drawImage(src, 0, 0); return c; }
 function placeEl(el, x, y, w, h) { el.style.left = `${x}px`; el.style.top = `${y}px`; el.style.width = `${w}px`; el.style.height = `${h}px`; }
@@ -269,7 +279,7 @@ function syncSelected() {
   const g = selGeom(); if (!g) return;
   const el = $('world').querySelector(`[data-id="${CSS.escape(S.sel)}"]`);
   if (el) placeEl(el, g.L.x, g.L.y, g.base.w * g.L.s, g.base.h * g.L.s);
-  updateSelBox(); updateShadow(); scheduleThumbs();
+  updateSelBox(); updateShadow(); updateWarn(); scheduleThumbs();
 }
 
 function setupStage() {

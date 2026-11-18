@@ -4,89 +4,101 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Banners HTML5</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="styles.css">
 <script src="vendor/jszip.min.js"></script>
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="dot"></span> Banners HTML5</div>
-  <input id="campaign" class="campaign" value="Banner" spellcheck="false" title="Nombre de la campaña (se usa en los archivos)">
+  <div class="brand"><span class="mark" aria-hidden="true"></span><span>Banners</span><span class="brand-sub">HTML5</span></div>
+  <div class="divider-v"></div>
+  <input id="campaign" class="campaign" value="Banner" spellcheck="false" title="Nombre de la campaña (se usa en los archivos)" aria-label="Nombre de la campaña">
   <div class="spacer"></div>
   <span id="status" class="status"></span>
-  <button id="btnGenerate" class="primary" disabled>Generar ZIP + GIF</button>
+  <button id="btnGenerate" class="primary" disabled>
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8m0 0 3-3m-3 3L5 7M3 12.5h10" /></svg>
+    Generar ZIP + GIF
+  </button>
 </header>
 
 <main class="layout">
   <aside class="side">
-    <section>
-      <h3>1 · Archivos</h3>
+    <section class="panel">
+      <h3><span class="step">1</span> Archivos</h3>
       <label id="drop" class="drop">
         <input id="file" type="file" multiple accept=".zip,.psd,.png,.jpg,.jpeg">
-        <strong>Soltá acá el ZIP</strong>
-        <span>con los PNG y/o el PSD (o el PSD suelto)</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4m0 0-4 4m4-4 4 4M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3" /></svg>
+        <strong>Soltá el ZIP o el PSD</strong>
+        <span>PNG por frame y/o PSD con capas</span>
       </label>
       <p id="ingestInfo" class="hint"></p>
       <button id="btnDemo" class="link">Probar con un ejemplo</button>
     </section>
 
-    <section>
-      <h3>2 · Tamaños</h3>
+    <section class="panel">
+      <h3><span class="step">2</span> Tamaños</h3>
       <div id="sizes" class="chips"></div>
       <div class="row">
-        <input id="customSize" placeholder="Otro, ej. 300x600" spellcheck="false">
+        <input id="customSize" placeholder="Otro, ej. 300x600" spellcheck="false" aria-label="Otro tamaño">
         <button id="addSize">Agregar</button>
       </div>
     </section>
 
-    <section>
-      <h3>3 · Animación</h3>
+    <section class="panel">
+      <h3><span class="step">3</span> Animación</h3>
       <label class="field">Transición entre frames <select id="transition"></select></label>
       <label class="field">Efecto de la foto <select id="photoFx"></select></label>
       <label class="field">Botón al final <select id="ctaFx"></select></label>
-      <p class="hint">Textos, logo y botón entran por separado (fade + 16 px, 0,375 s, quadOut). Sin loop, termina en el CTA. Cada frame y cada capa se pueden cambiar a la derecha.</p>
       <p id="engineInfo" class="engine"></p>
       <label class="check"><input type="checkbox" id="embedGsap"> Incluir GSAP dentro del ZIP</label>
-      <p class="hint">Si no, GSAP se carga del CDN de Google (s0.2mdn.net), que Google Ads, DV360 y CM360 no cuentan en el peso. Activalo para plataformas que piden todo adentro del ZIP (suma ~28 KB).</p>
+      <p class="hint">Si no, GSAP se carga del CDN de Google (s0.2mdn.net), que Google Ads, DV360 y CM360 no cuentan en el peso. Suma ~28 KB si va adentro.</p>
     </section>
 
-    <section>
-      <h3>4 · Click y peso</h3>
+    <section class="panel">
+      <h3><span class="step">4</span> Click y peso</h3>
       <label class="field">URL de clic (clickTag)
         <input id="clickTag" placeholder="https://" spellcheck="false">
       </label>
-      <label class="field">Peso máximo del ZIP (KB)
-        <input id="maxKB" type="number" value="228" min="40" max="2000">
+      <label class="field">Peso máximo del ZIP
+        <span class="suffix"><input id="maxKB" type="number" value="228" min="40" max="2000"><em>KB</em></span>
       </label>
     </section>
 
-    <section>
-      <h3>5 · Indicaciones <span class="tag">beta</span></h3>
+    <section class="panel">
+      <h3><span class="step">5</span> Indicaciones <span class="tag">beta</span></h3>
       <textarea id="prompt" rows="3" placeholder="Ej: fundido, 13 segundos, link https://…, sumá 728x90"></textarea>
-      <button id="btnPrompt">Aplicar</button>
-      <p id="promptInfo" class="hint">Por ahora entiendo URL, transición, duración total, peso y tamaños. Cuando conectemos Claude vas a poder pedir cualquier cambio.</p>
+      <button id="btnPrompt" class="full">Aplicar</button>
+      <p id="promptInfo" class="hint">Entiendo URL, transición, duración total, peso y tamaños. Cuando conectemos Claude vas a poder pedir cualquier cambio.</p>
     </section>
   </aside>
 
   <section class="center">
-    <div class="tabs" id="sizeTabs"></div>
-    <div class="strip" id="strip"></div>
-    <div class="toolbar">
-      <span id="frameLabel" class="muted"></span>
+    <div class="center-head">
+      <div class="tabs" id="sizeTabs" role="tablist"></div>
       <div class="spacer"></div>
-      <button id="btnUndo" title="Deshacer (Ctrl+Z)">Deshacer</button>
-      <button id="btnResetFrame" title="Vuelve el frame a la posición automática">Restablecer frame</button>
-      <div class="zoom" title="Zoom de la vista (+ / − / 0 = 100 %)">
-        <button id="zoomOut" aria-label="Alejar">−</button>
-        <button id="zoomLabel" title="Volver al tamaño real (100 %)">100%</button>
-        <button id="zoomIn" aria-label="Acercar">+</button>
-        <button id="zoomFit">Ajustar</button>
+      <div class="toolgroup">
+        <button id="btnUndo" class="icon" title="Deshacer (Ctrl+Z)" aria-label="Deshacer"><svg viewBox="0 0 16 16"><path d="M5.5 4 2.5 7l3 3M3 7h6.5a3.5 3.5 0 0 1 0 7H8" /></svg></button>
+        <button id="btnResetFrame" class="icon" title="Restablecer el frame a la posición automática" aria-label="Restablecer frame"><svg viewBox="0 0 16 16"><path d="M2.5 8a5.5 5.5 0 1 0 1.7-4M2.5 2.5V5H5" /></svg></button>
       </div>
-      <button id="btnPreview" class="accent">▶ Vista previa</button>
+      <div class="toolgroup zoom" title="Zoom de la vista (+ / − / 0 = 100 %)">
+        <button id="zoomOut" class="icon" aria-label="Alejar"><svg viewBox="0 0 16 16"><path d="M3.5 8h9" /></svg></button>
+        <button id="zoomLabel" title="Volver al tamaño real (100 %)">100%</button>
+        <button id="zoomIn" class="icon" aria-label="Acercar"><svg viewBox="0 0 16 16"><path d="M3.5 8h9M8 3.5v9" /></svg></button>
+        <button id="zoomFit" title="Ajustar a la ventana">Ajustar</button>
+      </div>
+      <button id="btnPreview" class="accent"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9l7-4.5z" class="fill" /></svg>Vista previa</button>
     </div>
+
+    <div class="strip" id="strip"></div>
+
     <div class="stage-wrap" id="stageWrap">
+      <div class="stage-meta"><span id="frameLabel"></span></div>
       <div class="empty" id="empty">
-        <p><strong>Subí tus archivos para empezar.</strong></p>
-        <p>Con el PSD separo fondo, textos, logo y botón para animarlos y para que los puedas mover. Con PNG aplanados cada imagen es un frame.</p>
+        <div class="empty-mark" aria-hidden="true"></div>
+        <p class="empty-title">Subí tus archivos para empezar</p>
+        <p>Con el PSD separo fondo, textos, logo y botón para animarlos y moverlos. Con PNG aplanados cada imagen es un frame.</p>
       </div>
       <div class="stage" id="stage" hidden>
         <div class="world" id="world"></div>
@@ -95,27 +107,29 @@
         <div class="guide h" id="guideH" hidden></div>
         <div class="selbox" id="selbox" hidden><div class="handle" id="handle"></div></div>
       </div>
+      <div class="warn" id="stageWarn" hidden></div>
     </div>
-    <p class="hint center-hint">Clic para elegir una capa · arrastrá para mover (se imanta al centro; Alt lo desactiva) · rueda o esquina para escalar · flechas para ajustar 1 px (Shift = 10 px). Elegí <b>Foto</b> para mover o hacer zoom del recorte. La vista arranca al 100 % (tamaño real); + / − / 0 cambian el zoom de la vista.</p>
+    <p class="hint center-hint"><kbd>Clic</kbd> elige capa · <kbd>Arrastrar</kbd> mueve e imanta al centro (<kbd>Alt</kbd> lo suelta) · <kbd>Rueda</kbd> escala · <kbd>←↑→↓</kbd> 1 px · <kbd>+</kbd><kbd>−</kbd><kbd>0</kbd> zoom de la vista · Elegí <b>Foto</b> para mover el recorte</p>
+
     <section class="pvsec">
-      <div class="pvhead"><h3>Vista previa · tamaño real</h3><button id="btnReplay">Repetir</button></div>
+      <div class="pvhead"><h3>Vista previa <span class="muted">· tamaño real</span></h3><button id="btnReplay" class="ghost small">Repetir</button></div>
       <div class="preview" id="previewBox"><div class="pv" id="pv"><iframe id="preview" title="Vista previa" sandbox="allow-scripts allow-same-origin allow-popups"></iframe></div></div>
     </section>
   </section>
 
   <aside class="inspector">
-    <section>
+    <section class="panel">
       <h3>Frame</h3>
-      <label class="field inline">Duración (s) <input id="duration" type="number" step="0.1" min="0.5" max="10"></label>
+      <label class="field inline">Duración <span class="suffix"><input id="duration" type="number" step="0.1" min="0.5" max="10"><em>s</em></span></label>
       <label class="field">Entrada de este frame <select id="frameTransition"></select></label>
       <label class="field">Foto de este frame <select id="framePhotoFx"></select></label>
       <p id="totalInfo" class="hint"></p>
     </section>
-    <section>
+    <section class="panel">
       <h3>Capas</h3>
       <div id="layers" class="layers"></div>
     </section>
-    <section id="selPanel" hidden>
+    <section class="panel" id="selPanel" hidden>
       <h3 id="selTitle">Selección</h3>
       <label class="field">Escala <input id="selScale" type="range" min="0.2" max="3" step="0.01"></label>
       <div class="row nums">
@@ -123,16 +137,16 @@
         <label>Y <input id="selY" type="number"></label>
         <label>% <input id="selS" type="number" step="1"></label>
       </div>
-      <button id="btnCover" hidden>Cubrir el banner</button>
+      <button id="btnCover" class="full" hidden>Cubrir el banner</button>
     </section>
-    <section>
+    <section class="panel">
       <h3>Entregables</h3>
       <div id="outputs" class="outputs"><p class="hint">Todavía no generaste nada.</p></div>
     </section>
   </aside>
 </main>
 
-<div class="busy" id="busy" hidden><div class="spinner"></div><p id="busyText">Procesando…</p></div>
+<div class="busy" id="busy" hidden><div class="busy-card"><div class="spinner"></div><p id="busyText">Procesando…</p></div></div>
 
 <script type="module" src="src/app.js"></script>
 </body>

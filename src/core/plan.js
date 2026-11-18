@@ -1,5 +1,5 @@
 // Modelo del proyecto, layout por tamaño y línea de tiempo. Sin DOM.
-import { splitColumns } from './raster.js';
+import { splitColumns, alphaBounds } from './raster.js';
 
 export const ANIMS = {
   fromL: { label: 'Entra desde la izquierda', dur: 0.375, ease: 'cubic-bezier(.25,.46,.45,.94)', from: 'translateX(-16px)' },
@@ -60,7 +60,8 @@ export function needsGsap(project) {
   return false;
 }
 
-export const PRESET_SIZES = ['300x250', '728x90', '160x600', '300x600', '320x50', '970x250', '336x280', '320x480'];
+// Ordenados por volumen de inventario (IAB / Google): primero los que más impresiones mueven.
+export const PRESET_SIZES = ['300x250', '728x90', '300x600', '320x50', '160x600', '970x250', '336x280', '320x480'];
 
 export const parseSize = (s) => { const [w, h] = s.split('x').map(Number); return { w, h }; };
 
@@ -99,21 +100,52 @@ export function autoLayout(frame, W, H) {
   const out = { bg: null, el: {} };
   if (frame.bg) {
     const r = frame.bg.raster;
-    const s = Math.max(W / r.w, H / r.h);
+    // Solo cuenta la parte opaca de la foto (puede tener bordes transparentes o degradados).
+    const ob = (r._opaque ||= alphaBounds(r, 250) || { x: 0, y: 0, w: r.w, h: r.h });
+    const s = Math.max(W / ob.w, H / ob.h);
     // Centro de lo que se veía en el maestro, relativo a la foto.
-    const cx = (frame.w / 2 - frame.bg.x) / r.w, cy = (frame.h / 2 - frame.bg.y) / r.h;
-    let x = W / 2 - cx * r.w * s, y = H / 2 - cy * r.h * s;
-    x = Math.min(0, Math.max(W - r.w * s, x));
-    y = Math.min(0, Math.max(H - r.h * s, y));
+    const cx = (frame.w / 2 - frame.bg.x), cy = (frame.h / 2 - frame.bg.y);
+    let x = W / 2 - cx * s, y = H / 2 - cy * s;
+    x = Math.min(-ob.x * s, Math.max(W - (ob.x + ob.w) * s, x));
+    y = Math.min(-ob.y * s, Math.max(H - (ob.y + ob.h) * s, y));
     out.bg = { x: Math.round(x), y: Math.round(y), s: Math.round(s * 1000) / 1000 };
   }
   const els = frame.elements;
   if (!els.length) return out;
+  const pad = Math.max(4, Math.round(Math.min(W, H) * 0.1));
+  // Formatos apaisados (728x90, 970x250, 320x50): los renglones y el logo/botón se acomodan en fila.
+  if (W / H >= 2.6) {
+    const order = [...els].sort((a, b) => (a.kind === 'text') === (b.kind === 'text') ? a.y - b.y || a.x - b.x : a.kind === 'text' ? -1 : 1);
+    const gapOf = (h) => Math.round(h * 0.3);
+    const rowSize = (row) => ({ w: row.reduce((a, e, i) => a + e.raster.w + (i ? gapOf(e.raster.h) : 0), 0), h: Math.max(...row.map((e) => e.raster.h)) });
+    const layouts = [[order]];
+    for (let k = 1; k < order.length; k++) layouts.push([order.slice(0, k), order.slice(k)]);
+    let best = null;
+    for (const rows of layouts) {
+      const sizes = rows.map(rowSize);
+      const vgap = rows.length > 1 ? Math.round(sizes[0].h * 0.2) : 0;
+      const tw = Math.max(...sizes.map((z) => z.w)), th = sizes.reduce((a, z) => a + z.h, 0) + vgap;
+      const g = Math.min(1, (W - pad * 2) / tw, (H - pad * 2) / th);
+      if (!best || g > best.g + 0.02) best = { rows, sizes, vgap, g, th };
+    }
+    const { rows, sizes, vgap, g, th } = best;
+    let y = (H - th * g) / 2;
+    rows.forEach((row, ri) => {
+      const z = sizes[ri];
+      let x = (W - z.w * g) / 2;
+      for (const e of row) {
+        out.el[e.id] = { x: Math.round(x), y: Math.round(y + ((z.h - e.raster.h) / 2) * g), s: Math.round(g * 1000) / 1000 };
+        x += (e.raster.w + gapOf(e.raster.h)) * g;
+      }
+      y += (z.h + vgap) * g;
+    });
+    return out;
+  }
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const e of els) { x0 = Math.min(x0, e.x); y0 = Math.min(y0, e.y); x1 = Math.max(x1, e.x + e.raster.w); y1 = Math.max(y1, e.y + e.raster.h); }
   const gw = x1 - x0, gh = y1 - y0;
-  const pad = Math.max(4, Math.round(Math.min(W, H) * 0.08));
-  const g = Math.min(1.25, (W - pad * 2) / gw, (H - pad * 2) / gh);
+  // Nunca agranda los textos (se verían borrosos); solo los achica si no entran.
+  const g = Math.min(1, (W - pad * 2) / gw, (H - pad * 2) / gh);
   const tw = gw * g, th = gh * g;
   // Mantiene la posición relativa del bloque y lo encierra dentro del área segura.
   const rcx = (x0 + gw / 2) / frame.w, rcy = (y0 + gh / 2) / frame.h;
