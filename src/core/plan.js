@@ -160,7 +160,7 @@ export function autoLayout(frame, W, H) {
 
 /**
  * Plan completo de un tamaño: tiempos, posiciones y animaciones.
- * project: { frames:[{ id, duration, anims:{elId:{anim,delay}}, src }], transition, layouts:{size:{frameId: layout}} }
+ * project: { frames:[{ id, duration, anims:{elId:{anim,delay,dur?}}, src }], transition, layouts:{size:{frameId: layout}} }
  */
 export function buildPlan(project, size) {
   const { w: W, h: H } = parseSize(size);
@@ -177,12 +177,15 @@ export function buildPlan(project, size) {
       const L = lay.el[e.id] || { x: e.x, y: e.y, s: 1 };
       const a = pf.anims[e.id] || { anim: 'fade', delay: 0 };
       const spec = ANIMS[a.anim] || ANIMS.fade;
-      const it = { id: e.id, kind: e.kind, name: e.name, raster: e.raster, shadow: e.shadow, x: L.x, y: L.y, s: L.s, anim: a.anim, start: textStart + (a.delay || 0), dur: spec.dur };
+      const it = { id: e.id, kind: e.kind, name: e.name, raster: e.raster, shadow: e.shadow, x: L.x, y: L.y, s: L.s, anim: a.anim, start: textStart + (a.delay || 0), dur: a.dur || spec.dur, stagger: spec.stagger };
       if (spec.split) {
         // Letras o palabras recortadas de la misma imagen: no cambia el diseño ni suma archivos.
         const gap = spec.split === 'words' ? Math.max(3, Math.round(e.raster.h * 0.22)) : 1;
         it.segs = splitColumns(e.raster, gap);
-        it.dur = spec.dur + spec.stagger * Math.max(0, it.segs.length - 1);
+        const n = Math.max(1, it.segs.length - 1);
+        // Si se estiró en la línea de tiempo, el escalonado se reparte en la nueva duración.
+        if (a.dur) it.stagger = Math.max(0.005, (a.dur - spec.dur) / n);
+        it.dur = spec.dur + it.stagger * (it.segs.length - 1);
       }
       return it;
     });

@@ -61,7 +61,7 @@ export function buildHtml(plan, assets, { title, clickTag }) {
       const spec = ANIMS[it.anim] || ANIMS.fade;
       if (it.anim === 'none') { html.push(`      <img class="tx st" id="${a.name}" src="${a.src}" style="left:${a.x}px;top:${a.y}px" alt="">`); continue; }
       html.push(`      <img class="tx" id="${a.name}" src="${a.src}" style="left:${a.x}px;top:${a.y}px;transform-origin:${r3(a.w / 2)}px ${r3(a.h / 2)}px" alt="">`);
-      anim(a.name, it.anim, spec.dur, spec.ease, it.start);
+      anim(a.name, it.anim, it.dur || spec.dur, spec.ease, it.start);
     }
     html.push(`    </div>`);
     void shBy;

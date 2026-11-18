@@ -92,13 +92,13 @@ export function buildGsapHtml(plan, assets, { title, clickTag, gsapSrc = GSAP_CD
         html.push(`      </div>`);
         js.push(`tl.set(${q(a.name)}, { opacity: 1 }, ${r3(it.start)});`);
         const segs = `"#${a.name} .seg"`;
-        if (it.anim === 'typewriter') js.push(`tl.fromTo(${segs}, { opacity: 0 }, { opacity: 1, duration: 0.01, ease: "none", stagger: ${spec.stagger} }, ${r3(it.start)});`);
-        else if (it.anim === 'words') js.push(`tl.fromTo(${segs}, { opacity: 0, x: -16 }, { opacity: 1, x: 0, duration: ${spec.dur}, ease: "power1.out", stagger: ${spec.stagger} }, ${r3(it.start)});`);
-        else js.push(`tl.fromTo(${segs}, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: ${spec.dur}, ease: "power1.out", stagger: ${spec.stagger} }, ${r3(it.start)});`);
+        if (it.anim === 'typewriter') js.push(`tl.fromTo(${segs}, { opacity: 0 }, { opacity: 1, duration: 0.01, ease: "none", stagger: ${r3(it.stagger ?? spec.stagger)} }, ${r3(it.start)});`);
+        else if (it.anim === 'words') js.push(`tl.fromTo(${segs}, { opacity: 0, x: -16 }, { opacity: 1, x: 0, duration: ${spec.dur}, ease: "power1.out", stagger: ${r3(it.stagger ?? spec.stagger)} }, ${r3(it.start)});`);
+        else js.push(`tl.fromTo(${segs}, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: ${spec.dur}, ease: "power1.out", stagger: ${r3(it.stagger ?? spec.stagger)} }, ${r3(it.start)});`);
       } else {
         html.push(`      <img class="tx" id="${a.name}" src="${a.src}" style="left:${a.x}px;top:${a.y}px;transform-origin:${r3(a.w / 2)}px ${r3(a.h / 2)}px" alt="">`);
         if (it.anim === 'none') js.push(`tl.set(${q(a.name)}, { opacity: 1 }, 0);`);
-        else js.push(tweenIn(q(a.name), it.anim, spec.dur, it.start));
+        else js.push(tweenIn(q(a.name), it.anim, it.dur || spec.dur, it.start));
       }
       // Efecto final del botón: después de que entró, termina en reposo.
       if (it.kind === 'cta' && plan.ctaFx !== 'none') {

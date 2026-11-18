@@ -73,9 +73,8 @@ async function handleFiles(files) {
   try {
     const res = await ingest(files, (t) => busy(true, t));
     loadSources(res);
-    const n = S.project.frames.length;
-    const sizes = Object.keys(res.sizes).join(', ');
-    $('ingestInfo').textContent = `${res.kind === 'psd' ? 'PSD' : 'PNG'}: ${n} frame${n === 1 ? '' : 's'} · ${sizes}. ${res.notes.join(' ')}`;
+    $('ingestInfo').textContent = '';
+    if (res.notes.length) status(res.notes.join(' '));
     if ($('campaign').value === 'Banner' && files[0]) $('campaign').value = files[0].name.replace(/\.(zip|psd|png|jpe?g)$/i, '');
   } catch (e) {
     console.error(e);
@@ -92,6 +91,8 @@ function loadSources(res) {
   S.sizes.forEach(ensureLayout);
   $('btnGenerate').disabled = false;
   $('empty').hidden = true; $('stage').hidden = false;
+  document.body.classList.remove('noproject');
+  viewZoom = 'auto';
   renderAll();
   refreshPreview();
 }
@@ -124,7 +125,17 @@ function renderAll() {
   if (!S.cur || !S.sizes.includes(S.cur)) S.cur = S.sizes[0];
   if (!S.cur) return;
   ensureLayout(S.cur);
-  renderTabs(); renderStage(); renderInspector(); scheduleThumbs();
+  renderTabs(); renderStage(); renderInspector(); renderTimeline(); scheduleThumbs(); renderPills();
+}
+
+// Textos de las pastillas de arriba.
+function renderPills() {
+  const n = S.sizes.length;
+  $('pillSizes').textContent = n ? `${S.sizes[0]}${n > 1 ? ` +${n - 1}` : ''}` : '—';
+  $('pillAnim').textContent = TRANSITIONS[currentTransition()].label;
+  const u = $('clickTag').value.trim().replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+  $('pillClick').textContent = u || 'sin URL';
+  $('pillWeight').textContent = `${parseInt($('maxKB').value, 10) || 228} KB`;
 }
 
 function renderTabs() {
@@ -136,8 +147,8 @@ function renderTabs() {
     box.appendChild(b);
   }
   const total = S.project.frames.reduce((a, f) => a + f.duration, 0);
-  $('frameLabel').textContent = `Frame ${S.frame + 1} de ${S.project.frames.length} · ${S.cur}`;
-  $('totalInfo').textContent = `Total: ${total.toFixed(1)} s · ${TRANSITIONS[S.project.transition].label.toLowerCase()} · sin loop`;
+  $('frameLabel').textContent = `Frame ${S.frame + 1} / ${S.project.frames.length}`;
+  $('totalInfo').textContent = `${total.toFixed(1).replace('.', ',')} s · sin loop`;
 }
 
 let thumbTimer = 0;
@@ -148,14 +159,15 @@ function renderThumbs() {
   const parts = renderFrameParts(plan);
   const box = $('strip'); box.innerHTML = '';
   plan.frames.forEach((f, i) => {
-    const d = document.createElement('div');
+    const d = document.createElement('button');
     d.className = 'thumb' + (i === S.frame ? ' on' : '');
     const c = composeFinal(plan, parts, i);
-    const k = Math.min(160 / plan.W, 64 / plan.H);
+    const k = Math.min(96 / plan.W, 52 / plan.H);
     const t = newCanvas(plan.W * k, plan.H * k);
     const ctx = t.getContext('2d'); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(c, 0, 0, t.width, t.height);
     d.appendChild(t);
-    d.append(`${i + 1} · ${f.dur.toFixed(1)} s`);
+    d.append(`${i + 1} · ${f.dur.toFixed(1).replace('.', ',')} s`);
+    d.title = `Frame ${i + 1}`;
     d.onclick = () => { S.frame = i; S.sel = null; renderAll(); };
     box.appendChild(d);
   });
@@ -164,11 +176,11 @@ function renderThumbs() {
 // ---------- editor ----------
 let zoom = 1;
 // Zoom de la vista (no cambia el banner). Arranca en 100 % = tamaño real; null = ajustar a la ventana.
-let viewZoom = 1;
+let viewZoom = 'auto'; // 'auto' = tamaño real si entra, si no lo achica; null = ajustar
 const ZOOMS = [0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 function fitZoom(W, H) {
   const wrap = $('stageWrap');
-  return Math.max(0.1, Math.min(4, (wrap.clientWidth - 80) / W, (wrap.clientHeight - 80) / H));
+  return Math.max(0.1, Math.min(4, (wrap.clientWidth - 56) / W, (wrap.clientHeight - 56) / H));
 }
 function setViewZoom(z) { viewZoom = z; if (S.project) renderStage(); }
 function stepZoom(dir) {
@@ -181,7 +193,7 @@ function renderStage() {
   const wrap = $('stageWrap');
   const availW = wrap.clientWidth - 80, availH = wrap.clientHeight - 80;
   void availW; void availH;
-  zoom = viewZoom == null ? fitZoom(W, H) : viewZoom;
+  zoom = viewZoom == null ? fitZoom(W, H) : viewZoom === 'auto' ? Math.min(1, fitZoom(W, H)) : viewZoom;
   $('zoomLabel').textContent = `${Math.round(zoom * 100)}%`;
   const stage = $('stage');
   stage.style.width = `${W * zoom}px`; stage.style.height = `${H * zoom}px`;
@@ -259,6 +271,7 @@ function updateSelBox() {
   $('selScale').value = g.L.s; $('selX').value = Math.round(g.L.x); $('selY').value = Math.round(g.L.y); $('selS').value = Math.round(g.L.s * 100);
   $('btnCover').hidden = S.sel !== 'bg';
   for (const el of document.querySelectorAll('.layer')) el.classList.toggle('on', el.dataset.id === S.sel);
+  for (const el of document.querySelectorAll('.tl-block, .tl-name')) el.classList.toggle('on', el.dataset.id === S.sel);
 }
 
 function moveSel(dx, dy) {
@@ -296,7 +309,7 @@ function setupStage() {
       const id = t.dataset && t.dataset.id;
       // Si la foto está seleccionada, arrastrar en cualquier lado mueve el recorte.
       if (S.sel === 'bg' && (!id || id === 'bg')) { /* keep bg */ }
-      else if (id) { S.sel = id; renderInspector(); }
+      else if (id) { if (S.sel !== id) { S.sel = id; renderInspector(); } }
       else { S.sel = null; updateSelBox(); return; }
       pushHistory();
       const g0 = selGeom();
@@ -342,6 +355,7 @@ function setupStage() {
   }, { passive: false });
   window.addEventListener('keydown', (ev) => {
     if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) return;
+    if (document.activeElement?.closest?.('.tl-block, .tl-end-h, .split')) return;
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z') { ev.preventDefault(); undo(); return; }
     if (ev.key === '+' || ev.key === '=') { ev.preventDefault(); stepZoom(1); return; }
     if (ev.key === '-' || ev.key === '_') { ev.preventDefault(); stepZoom(-1); return; }
@@ -352,7 +366,7 @@ function setupStage() {
     if (map[ev.key]) { ev.preventDefault(); pushHistory(); moveSel(...map[ev.key]); refreshPreviewSoon(); }
     if (ev.key === 'Escape') { S.sel = null; updateSelBox(); }
   });
-  window.addEventListener('resize', () => S.project && renderStage());
+  window.addEventListener('resize', () => { if (S.project) { renderStage(); fitPreview(); renderTimeline(); } });
 }
 let wheelTimer = 0;
 function showGuides(v, h) {
@@ -374,8 +388,8 @@ function renderInspector() {
   if (src.bg) {
     const d = document.createElement('div');
     d.className = 'layer' + (S.sel === 'bg' ? ' on' : ''); d.dataset.id = 'bg';
-    d.innerHTML = `<div class="name"><span class="k">foto</span><em>Fondo / recorte</em></div>`;
-    d.onclick = () => { S.sel = 'bg'; updateSelBox(); };
+    d.innerHTML = `<div class="name"><span class="k">foto</span><em>Fondo</em></div>`;
+    d.onclick = () => selectLayer('bg');
     box.appendChild(d);
   }
   const kindLabel = { text: 'texto', logo: 'logo', cta: 'botón' };
@@ -384,26 +398,25 @@ function renderInspector() {
     const a = pf.anims[e.id] || (pf.anims[e.id] = { anim: 'fade', delay: 0 });
     const d = document.createElement('div');
     d.className = 'layer' + (S.sel === e.id ? ' on' : '') + (L.hidden ? ' off' : ''); d.dataset.id = e.id;
-    d.innerHTML = `<div class="name"><span class="k">${kindLabel[e.kind] || e.kind}</span><em title="${e.name.replace(/"/g, '&quot;')}">${e.name.replace(/</g, '&lt;')}</em><input type="checkbox" ${L.hidden ? '' : 'checked'} title="Visible"></div>
-      <div class="ctrl"><select title="Animación de entrada">${Object.entries(ANIMS).map(([k, v]) => `<option value="${k}" ${k === a.anim ? 'selected' : ''}>${v.label}</option>`).join('')}</select>
-      <input type="number" step="0.05" min="0" value="${a.delay || 0}" title="Retraso (s) desde que entra el frame"></div>`;
-    d.onclick = (ev) => { if (ev.target.closest('select,input')) return; S.sel = e.id; updateSelBox(); };
-    const [chk, sel, del] = d.querySelectorAll('input[type=checkbox], select, input[type=number]');
-    chk.onchange = () => { pushHistory(); L.hidden = !chk.checked; renderStage(); renderInspector(); scheduleThumbs(); refreshPreviewSoon(); };
-    sel.onchange = () => { pushHistory(); a.anim = sel.value; renderEngine(); refreshPreviewSoon(); };
-    del.onchange = () => { pushHistory(); a.delay = Math.max(0, parseFloat(del.value) || 0); refreshPreviewSoon(); };
+    const nm = shortName(e.name).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    d.innerHTML = `<div class="name"><span class="k">${kindLabel[e.kind] || e.kind}</span><em title="${nm}">${nm}</em><input type="checkbox" ${L.hidden ? '' : 'checked'} aria-label="Visible: ${nm}"></div>` +
+      (S.sel === e.id ? `<select aria-label="Animación de entrada">${Object.entries(ANIMS).map(([k, v]) => `<option value="${k}" ${k === a.anim ? 'selected' : ''}>${v.label}</option>`).join('')}</select>` : '');
+    d.onclick = (ev) => { if (ev.target.closest('select,input')) return; selectLayer(e.id); };
+    const chk = d.querySelector('input[type=checkbox]'), sel = d.querySelector('select');
+    chk.onchange = () => { pushHistory(); L.hidden = !chk.checked; renderStage(); renderInspector(); renderTimeline(); scheduleThumbs(); refreshPreviewSoon(); };
+    if (sel) sel.onchange = () => { pushHistory(); a.anim = sel.value; delete a.dur; renderEngine(); renderTimeline(); refreshPreviewSoon(); };
     box.appendChild(d);
   }
   if (!src.elements.length) {
-    const p = document.createElement('p'); p.className = 'hint';
-    p.textContent = 'Este frame no tiene capas separadas (PNG aplanado).';
+    const p = document.createElement('p'); p.className = 'none';
+    p.textContent = 'Imagen aplanada, sin capas.';
     box.appendChild(p);
   }
   updateSelBox();
 }
 
 function setupInspector() {
-  $('duration').onchange = () => { pushHistory(); curPF().duration = Math.max(0.5, parseFloat($('duration').value) || 2); renderTabs(); scheduleThumbs(); refreshPreviewSoon(); };
+  $('duration').onchange = () => { pushHistory(); curPF().duration = Math.max(0.5, parseFloat($('duration').value) || 2); renderTabs(); renderTimeline(); scheduleThumbs(); refreshPreviewSoon(); };
   $('selScale').oninput = () => scaleSel(parseFloat($('selScale').value));
   $('selScale').onpointerdown = () => pushHistory();
   $('selScale').onchange = () => refreshPreviewSoon();
@@ -440,12 +453,19 @@ async function refreshPreview() {
   const { html, urls, plan } = await previewHtml(S.project, S.cur, { title: $('campaign').value, clickTag: $('clickTag').value || 'https://' });
   S.previewUrls.forEach((u) => URL.revokeObjectURL(u)); S.previewUrls = urls;
   const f = $('preview');
-  const box = $('previewBox');
-  const k = 1; // vista previa a tamaño real
+  pvSize = { W: plan.W, H: plan.H };
   f.style.width = `${plan.W}px`; f.style.height = `${plan.H}px`;
-  f.style.transform = `scale(${k})`;
-  $('pv').style.width = `${plan.W * k}px`; $('pv').style.height = `${plan.H * k}px`;
+  fitPreview();
   f.srcdoc = html;
+}
+// Vista previa a tamaño real; si el panel es más chico, se achica para que entre entera.
+let pvSize = null;
+function fitPreview() {
+  if (!pvSize) return;
+  const box = $('previewBox');
+  const k = Math.min(1, (box.clientWidth - 56) / pvSize.W, (box.clientHeight - 56) / pvSize.H);
+  $('preview').style.transform = `scale(${k})`;
+  $('pv').style.width = `${pvSize.W * k}px`; $('pv').style.height = `${pvSize.H * k}px`;
 }
 
 // ---------- descargas ----------
@@ -471,6 +491,7 @@ async function generateAll() {
   if (!S.project) return;
   busy(true, 'Generando…');
   const outBox = $('outputs'); outBox.innerHTML = '';
+  $('btnOutputs').hidden = true;
   const title = $('campaign').value, base = slug(title);
   const clickTag = $('clickTag').value.trim() || 'https://';
   const maxKB = parseInt($('maxKB').value, 10) || 228;
@@ -485,7 +506,7 @@ async function generateAll() {
       const d = document.createElement('div'); d.className = 'out';
       d.innerHTML = `<div class="head"><span>${size}</span><span class="${r.fits ? 'ok' : 'bad'}">${kb(r.zip.size)}${r.fits ? '' : ` · pasa de ${maxKB} KB`}</span></div>
         <div class="dl"></div>
-        <div class="hint">${r.plan.gsap ? "GSAP" : "CSS"} · JPG calidad ${Math.round(r.quality * 100)} · ${r.plan.frames.length} frames · ${r.plan.total.toFixed(1)} s</div>
+        <div class="hint">${r.plan.gsap ? 'GSAP' : 'CSS'} · ${r.plan.frames.length} frames · ${r.plan.total.toFixed(1).replace('.', ',')} s</div>
         <img src="${gu}" alt="GIF ${size}">`;
       d.querySelector('.dl').append(downloadLink(r.zip, zipName, 'ZIP HTML5'), downloadLink(r.gif, gifName, `GIF (${kb(r.gif.size)})`));
       outBox.appendChild(d);
@@ -499,7 +520,11 @@ async function generateAll() {
       const a = downloadLink(blob, `${base}_entregables.zip`, `Descargar todo (${kb(blob.size)})`);
       const p = document.createElement('p'); p.appendChild(a); outBox.prepend(p);
     }
-    status(`Listo: ${results.length} tamaño${results.length === 1 ? '' : 's'}`);
+    status('');
+    const bad = results.filter((r) => !r.fits).length;
+    $('btnOutputs').hidden = false;
+    $('btnOutputs').textContent = bad ? `Entregables · ${bad} pasado${bad > 1 ? 's' : ''} de peso` : `Entregables (${results.length})`;
+    openPop('popOutputs', $('btnOutputs'));
   } catch (e) {
     console.error(e);
     outBox.innerHTML = `<p class="hint">Error al generar: ${e.message}</p>`;
@@ -514,11 +539,12 @@ function fillSelect(sel, map, extra) {
 }
 function renderEngine() {
   const g = S.project ? needsGsap(S.project) : false;
-  $('engineInfo').innerHTML = g ? 'Motor: <b>GSAP</b> (por los efectos elegidos)' : 'Motor: <b>CSS</b> (0 KB extra). Pasa a GSAP solo si elegís un efecto que lo necesita.';
+  $('engineInfo').innerHTML = g ? 'Usa <b>GSAP</b> por los efectos elegidos.' : 'Usa <b>CSS</b>: 0 KB extra.';
 }
 function setTransition(v) {
   $('transition').value = v;
-  if (S.project) { S.project.transition = v; renderTabs(); renderEngine(); refreshPreviewSoon(); }
+  if (S.project) { S.project.transition = v; renderTabs(); renderEngine(); renderTimeline(); refreshPreviewSoon(); }
+  renderPills();
 }
 
 function applyPrompt() {
@@ -534,25 +560,186 @@ function applyPrompt() {
     S.project.frames.forEach((f) => { f.duration = Math.round(f.duration * k * 10) / 10; });
     renderAll();
   }
-  $('promptInfo').textContent = notes.length ? `Entendí: ${notes.join(' · ')}.` : 'No encontré nada que pueda aplicar todavía. Cuando conectemos Claude vas a poder pedir cualquier cambio.';
+  $('promptInfo').textContent = notes.length ? `Hecho: ${notes.join(' · ')}.` : 'Por ahora entiendo URL, transición, segundos, peso y tamaños.';
+  renderPills();
   refreshPreviewSoon();
 }
 
-function setup() {
-  const drop = $('drop');
-  $('file').onchange = (e) => handleFiles([...e.target.files]);
-  ['dragenter', 'dragover'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('over'); }));
-  ['dragleave', 'drop'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
-  drop.addEventListener('drop', (e) => handleFiles([...e.dataTransfer.files]));
-  document.body.addEventListener('dragover', (e) => e.preventDefault());
-  document.body.addEventListener('drop', (e) => { e.preventDefault(); if (e.target.closest('#drop')) return; handleFiles([...e.dataTransfer.files]); });
-  $('btnDemo').onclick = () => {
-    const res = demoSources();
-    $('campaign').value = 'Demo';
-    $('clickTag').value ||= 'https://www.example.com/';
-    loadSources(res);
-    $('ingestInfo').textContent = `Ejemplo: ${S.project.frames.length} frames · 300x250 con capas separadas.`;
+// ---------- selección ----------
+function selectLayer(id) {
+  const changed = S.sel !== id;
+  S.sel = id;
+  if (changed) renderInspector(); else updateSelBox();
+}
+
+// "Texto largo · 2" → "2 · Texto largo", para que el número del renglón no quede cortado.
+function shortName(n) { const m = n.match(/^(.*) · (\d+)$/); return m ? `${m[2]} · ${m[1]}` : n; }
+
+// ---------- línea de tiempo ----------
+// Un bloque por capa: arrastrarlo cambia cuándo entra, estirarlo desde el borde cambia cuánto dura.
+// También con teclado: ←/→ mueve 0,05 s (Shift: 0,25 s), Alt+←/→ cambia la duración.
+const SNAP = 0.05;
+const snap = (v) => Math.round(v / SNAP) * SNAP;
+const fmt = (v) => v.toFixed(2).replace(/0$/, '').replace('.', ',');
+function renderTimeline() {
+  const box = $('timeline');
+  if (!S.project || !S.cur) { box.innerHTML = ''; return; }
+  const plan = buildPlan(S.project, S.cur);
+  const f = plan.frames[S.frame], pf = curPF();
+  const trDur = S.frame === 0 ? 0 : f.trDur;
+  const items = f.items.map((it) => ({ it, t0: it.start - f.start, t1: it.start - f.start + Math.max(it.dur, 0.05) }));
+  const span = Math.max(pf.duration, ...items.map((x) => x.t1)) + 0.3;
+  box.innerHTML = '';
+  const grid = document.createElement('div'); grid.className = 'tl-grid';
+  const ruler = document.createElement('div'); ruler.className = 'tl-ruler';
+  grid.append(document.createElement('div'), ruler);
+  box.appendChild(grid);
+  const trackW = () => ruler.clientWidth || 1;
+  const pct = (t) => `${(t / span) * 100}%`;
+  const step = span > 6 ? 1 : 0.5;
+  for (let t = 0; t <= span - 0.1; t += step) { const sp = document.createElement('span'); sp.style.left = pct(t); sp.textContent = `${fmt(t)}s`; ruler.appendChild(sp); }
+  const kindLabel = { text: 'texto', logo: 'logo', cta: 'botón' };
+  const tracks = [];
+  if (!items.length) { const p = document.createElement('div'); p.className = 'tl-empty'; p.textContent = 'Este frame no tiene capas para animar.'; p.style.gridColumn = '1 / 3'; grid.appendChild(p); }
+  for (const { it, t0, t1 } of items) {
+    const a = pf.anims[it.id];
+    const name = document.createElement('div');
+    name.className = 'tl-name' + (S.sel === it.id ? ' on' : ''); name.dataset.id = it.id;
+    name.innerHTML = `<span class="k">${kindLabel[it.kind] || it.kind}</span><em></em>`;
+    name.querySelector('em').textContent = shortName(it.name); name.title = it.name;
+    name.onclick = () => selectLayer(it.id);
+    const track = document.createElement('div'); track.className = 'tl-track';
+    if (trDur) { const tr = document.createElement('div'); tr.className = 'tl-trans'; tr.style.width = pct(trDur); tr.title = 'Transición del frame'; track.appendChild(tr); }
+    const b = document.createElement('div');
+    b.className = 'tl-block' + (S.sel === it.id ? ' on' : ''); b.dataset.id = it.id; b.dataset.kind = it.kind;
+    b.tabIndex = 0; b.setAttribute('role', 'slider');
+    const label = () => { b.setAttribute('aria-label', `${it.name}: entra en ${fmt(t0 + 0)} s`); };
+    label();
+    b.style.left = pct(t0); b.style.width = pct(t1 - t0);
+    b.textContent = `${fmt(t1 - t0)}s`;
+    const canStretch = it.anim !== 'none' && it.anim !== 'typewriter' || it.segs;
+    if (canStretch) { const g = document.createElement('span'); g.className = 'grip'; b.appendChild(g); }
+    b.title = 'Arrastrá para mover · estirá desde el borde para cambiar la duración';
+    // arrastre
+    b.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault(); b.focus();
+      if (S.sel !== it.id) { S.sel = it.id; renderInspector(); }
+      pushHistory();
+      const mode = ev.target.classList.contains('grip') ? 'dur' : 'move';
+      const d0 = a.delay || 0, dur0 = t1 - t0, x0 = ev.clientX, pps = trackW() / span;
+      b.setPointerCapture(ev.pointerId);
+      const move = (e) => {
+        const dt = (e.clientX - x0) / pps;
+        if (mode === 'move') {
+          a.delay = Math.max(0, snap(d0 + dt));
+          const nt0 = t0 + (a.delay - d0);
+          b.style.left = pct(nt0); b.textContent = `${fmt(dur0)}s`;
+        } else {
+          a.dur = Math.max(0.1, snap(dur0 + dt));
+          b.style.width = pct(a.dur); b.textContent = `${fmt(a.dur)}s`;
+        }
+        if (canStretch) { const g = document.createElement('span'); g.className = 'grip'; b.appendChild(g); }
+      };
+      const up = () => { b.removeEventListener('pointermove', move); b.removeEventListener('pointerup', up); b.removeEventListener('pointercancel', up); renderTimeline(); refreshPreviewSoon(); };
+      b.addEventListener('pointermove', move); b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+    });
+    b.addEventListener('keydown', (ev) => {
+      const dir = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+      if (!dir) return;
+      ev.preventDefault(); pushHistory();
+      const st = ev.shiftKey ? 0.25 : SNAP;
+      if (ev.altKey && canStretch) a.dur = Math.max(0.1, snap((a.dur || t1 - t0) + dir * st));
+      else a.delay = Math.max(0, snap((a.delay || 0) + dir * st));
+      renderTimeline(); refreshPreviewSoon();
+      document.querySelector(`.tl-block[data-id="${CSS.escape(it.id)}"]`)?.focus();
+    });
+    b.addEventListener('dblclick', () => { pushHistory(); delete a.dur; a.delay = 0; renderTimeline(); refreshPreviewSoon(); });
+    track.appendChild(b);
+    grid.append(name, track);
+    tracks.push(track);
+  }
+  // Fin del frame: se arrastra para cambiar cuánto dura el frame.
+  const end = document.createElement('div'); end.className = 'tl-end';
+  const placeEnd = () => { const r = ruler.getBoundingClientRect(), g = grid.getBoundingClientRect(); end.style.left = `${r.left - g.left + (pf.duration / span) * r.width}px`; };
+  const h = document.createElement('div'); h.className = 'tl-end-h'; h.tabIndex = 0; h.setAttribute('role', 'slider');
+  h.setAttribute('aria-label', `Duración del frame: ${fmt(pf.duration)} s`); h.title = `Fin del frame (${fmt(pf.duration)} s): arrastrá para cambiar la duración`;
+  end.appendChild(h); grid.appendChild(end);
+  requestAnimationFrame(placeEnd);
+  const setDur = (v) => { pf.duration = Math.max(0.5, Math.min(10, snap(v))); $('duration').value = pf.duration; renderTabs(); };
+  h.addEventListener('pointerdown', (ev) => {
+    ev.preventDefault(); pushHistory();
+    const x0 = ev.clientX, d0 = pf.duration, pps = trackW() / span;
+    h.setPointerCapture(ev.pointerId);
+    const move = (e) => { setDur(d0 + (e.clientX - x0) / pps); placeEnd(); h.title = `${fmt(pf.duration)} s`; };
+    const up = () => { h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); renderTimeline(); scheduleThumbs(); refreshPreviewSoon(); };
+    h.addEventListener('pointermove', move); h.addEventListener('pointerup', up);
+  });
+  h.addEventListener('keydown', (ev) => {
+    const dir = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+    if (!dir) return;
+    ev.preventDefault(); pushHistory(); setDur(pf.duration + dir * (ev.shiftKey ? 0.5 : 0.1));
+    renderTimeline(); scheduleThumbs(); refreshPreviewSoon(); document.querySelector('.tl-end-h')?.focus();
+  });
+}
+
+// ---------- popovers de la barra ----------
+function openPop(id, anchor) {
+  const p = $(id);
+  if (!p.matches(':popover-open')) p.showPopover();
+  placePop(p, anchor);
+}
+function placePop(p, anchor) {
+  const r = anchor.getBoundingClientRect();
+  const w = p.offsetWidth;
+  const left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2));
+  p.style.left = `${left}px`; p.style.top = `${r.bottom + 6}px`;
+}
+function setupPopovers() {
+  for (const btn of document.querySelectorAll('[popovertarget]')) {
+    const p = $(btn.getAttribute('popovertarget'));
+    p.addEventListener('toggle', (e) => { if (e.newState === 'open') { placePop(p, btn); p.querySelector('button, input:not([type=checkbox]), select, textarea')?.focus(); } btn.classList.toggle('on', e.newState === 'open'); });
+  }
+}
+
+// ---------- paneles redimensionables ----------
+function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } return null; }
+function setupSplits() {
+  const panes = $('panes'), root = document.documentElement;
+  const applyV = (px) => { panes.style.setProperty('--edW', `${Math.round(px)}px`); };
+  const applyH = (px) => { root.style.setProperty('--dockH', `${Math.round(px)}px`); };
+  const v0 = parseFloat(store('bn.edW')), h0 = parseFloat(store('bn.dockH'));
+  if (v0) applyV(v0); if (h0) applyH(h0);
+  const after = () => { if (S.project) { renderStage(); fitPreview(); renderTimeline(); } };
+  const limitsV = () => { const total = $('editorPane').offsetWidth + $('previewPane').offsetWidth; return [220, total - 220]; };
+  const limitsH = () => [92, Math.max(120, $('work').clientHeight - 200)];
+  const drag = (el, axis, get, apply, limits, key) => {
+    el.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault(); el.setPointerCapture(ev.pointerId); el.classList.add('on');
+      const start = axis === 'x' ? ev.clientX : ev.clientY, s0 = get();
+      const move = (e) => { const [lo, hi] = limits(); const d = (axis === 'x' ? e.clientX : e.clientY) - start; apply(Math.max(lo, Math.min(hi, axis === 'x' ? s0 + d : s0 - d))); after(); };
+      const up = () => { el.classList.remove('on'); el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); store(key, String(get())); };
+      el.addEventListener('pointermove', move); el.addEventListener('pointerup', up);
+    });
+    el.addEventListener('keydown', (ev) => {
+      const k = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[ev.key]; if (!k) return;
+      ev.preventDefault(); const [lo, hi] = limits(); const step = ev.shiftKey ? 80 : 20;
+      apply(Math.max(lo, Math.min(hi, get() + (axis === 'x' ? k : -k) * step))); after(); store(key, String(get()));
+    });
+    el.addEventListener('dblclick', () => { if (axis === 'x') panes.style.removeProperty('--edW'); else root.style.removeProperty('--dockH'); try { localStorage.removeItem(key); } catch (e) { /* sin almacenamiento */ } after(); });
   };
+  drag($('splitV'), 'x', () => $('editorPane').offsetWidth, applyV, limitsV, 'bn.edW');
+  drag($('splitH'), 'y', () => $('dock').offsetHeight, applyH, limitsH, 'bn.dockH');
+}
+
+function setup() {
+  // Se suelta el archivo en cualquier lado de la pantalla (el editor vacío es la zona marcada).
+  $('file').onchange = (e) => handleFiles([...e.target.files]);
+  const work = $('work');
+  let dragDepth = 0;
+  document.body.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; work.classList.add('over'); });
+  document.body.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; work.classList.remove('over'); } });
+  document.body.addEventListener('dragover', (e) => e.preventDefault());
+  document.body.addEventListener('drop', (e) => { e.preventDefault(); dragDepth = 0; work.classList.remove('over'); handleFiles([...e.dataTransfer.files]); });
   fillSelect($('transition'), TRANSITIONS); fillSelect($('photoFx'), PHOTO_FX); fillSelect($('ctaFx'), CTA_FX);
   fillSelect($('frameTransition'), TRANSITIONS, 'Igual que el resto'); fillSelect($('framePhotoFx'), PHOTO_FX, 'Igual que el resto');
   $('transition').onchange = () => setTransition($('transition').value);
@@ -567,11 +754,15 @@ function setup() {
   };
   $('btnPrompt').onclick = applyPrompt;
   $('btnGenerate').onclick = generateAll;
-  $('btnPreview').onclick = refreshPreview;
   $('btnReplay').onclick = refreshPreview;
+  $('clickTag').oninput = renderPills;
   $('clickTag').onchange = refreshPreviewSoon;
-  setupStage(); setupInspector();
-  renderSizes();
+  $('maxKB').oninput = renderPills;
+  if (!S.project) document.body.classList.add('noproject');
+  setupStage(); setupInspector(); setupPopovers(); setupSplits();
+  renderSizes(); renderPills();
+  // Ejemplo interno para pruebas: abrir con #demo
+  if (location.hash === '#demo') { $('campaign').value = 'Demo'; $('clickTag').value ||= 'https://www.example.com/'; loadSources(demoSources()); }
 }
 setup();
 window.__app = S; // para pruebas automáticas
